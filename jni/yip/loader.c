@@ -35,7 +35,6 @@
 #undef LEAF_IMPLEMENTATION
 
 #include "util.h"
-#include "knshim.h"
 #include "jnistuff.h"
 #include "apkiter.h"
 #include "loader.h"

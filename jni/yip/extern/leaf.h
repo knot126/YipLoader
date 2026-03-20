@@ -5,7 +5,7 @@
  * 
  * ****************************************************************************
  * 
- * Copyright (C) 2024 - 2025 Knot126
+ * This file is part of Leaf. Copyright (C) 2024 - 2026 Knot126.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the “Software”), to deal
@@ -26,6 +26,10 @@
  * SOFTWARE.
  */
 
+#if !defined(__arm__) && !defined(__aarch64__) && !defined(__i386__) && !defined(__x86_64__)
+	#error "This platform isn't supported by Leaf yet!"
+#endif
+
 #ifndef LEAF_HEADER
 #define LEAF_HEADER
 
@@ -43,32 +47,42 @@
 #endif
 
 #ifdef LEAF_32BIT
-#define LEAF_CURRENT_CLASS 1
-#define LeafEhdr Elf32_Ehdr
-#define LeafPhdr Elf32_Phdr
-#define LeafDyn  Elf32_Dyn
-#define LeafRel  Elf32_Rel
-#define LeafRela Elf32_Rela
-#define LeafSym  Elf32_Sym
-#define LeafAddr Elf32_Addr
-#define LeafRelocSym(i) (i >> 8)
-#define LeafRelocType(i) (i & 0xff)
+	#define LEAF_CURRENT_CLASS 1
+	#define LeafEhdr Elf32_Ehdr
+	#define LeafPhdr Elf32_Phdr
+	#define LeafDyn  Elf32_Dyn
+	#define LeafRel  Elf32_Rel
+	#define LeafRela Elf32_Rela
+	#define LeafSym  Elf32_Sym
+	#define LeafAddr Elf32_Addr
+	#define LeafRelocSym(i) (i >> 8)
+	#define LeafRelocType(i) (i & 0xff)
 #else
-#define LEAF_CURRENT_CLASS 2
-#define LeafEhdr Elf64_Ehdr
-#define LeafPhdr Elf64_Phdr
-#define LeafDyn  Elf64_Dyn
-#define LeafRel  Elf64_Rel
-#define LeafRela Elf64_Rela
-#define LeafSym  Elf64_Sym
-#define LeafAddr Elf64_Addr
-#define LeafRelocSym(i) (i >> 32)
-#define LeafRelocType(i) (i & 0xffffffff)
+	#define LEAF_CURRENT_CLASS 2
+	#define LeafEhdr Elf64_Ehdr
+	#define LeafPhdr Elf64_Phdr
+	#define LeafDyn  Elf64_Dyn
+	#define LeafRel  Elf64_Rel
+	#define LeafRela Elf64_Rela
+	#define LeafSym  Elf64_Sym
+	#define LeafAddr Elf64_Addr
+	#define LeafRelocSym(i) (i >> 32)
+	#define LeafRelocType(i) (i & 0xffffffff)
+#endif
+
+#ifndef DT_GNU_HASH
+	#define DT_GNU_HASH 0x6ffffef5
 #endif
 
 // Same for 32/64 bit
 #define LeafSymBind(i) (i >> 4)
 #define LeafSymType(i) (i & 0xf)
+
+struct Leaf;
+
+typedef void *(*LeafDlopenFunction)(struct Leaf *self, const char *name);
+typedef void *(*LeafDlsymFunction)(struct Leaf *self, void *handle, const char *symbol);
+typedef void (*LeafDlcloseFunction)(struct Leaf *self, void *handle);
 
 typedef struct LeafLoadedSegment {
 	void *addr;
@@ -84,9 +98,7 @@ typedef struct Leaf {
 	// Segments of the program
 	// 
 	// Originally to implement loading things aligned I was going to load
-	// segments sparsely, but it seems like that doesn't work with SH. I'm not
-	// sure if that's actually conformant to the ELF spec since both sections
-	// really.
+	// segments sparsely, but it seems like that doesn't work with SH.
 	LeafLoadedSegment *segments;
 	size_t segment_count;
 	
@@ -122,6 +134,11 @@ typedef struct Leaf {
 	// Finialisation function array
 	void **fini_array;
 	size_t fini_count;
+	
+	// Callbacks for external libraries
+	LeafDlopenFunction dl_open;
+	LeafDlsymFunction dl_sym;
+	LeafDlcloseFunction dl_close;
 } Leaf;
 
 typedef struct LeafStream {
@@ -131,6 +148,7 @@ typedef struct LeafStream {
 } LeafStream;
 
 Leaf *LeafInit(void);
+bool LeafSetLoaderCallbacks(Leaf *self, LeafDlopenFunction open, LeafDlsymFunction sym, LeafDlcloseFunction close);
 const char *LeafLoadFromBuffer(Leaf *self, void *contents, size_t length);
 const char *LeafLoadFromFile(Leaf *self, const char *path);
 void *LeafSymbolAddr(Leaf *self, const char *symbol_name);
@@ -147,7 +165,7 @@ void LeafFree(Leaf *self);
 		#define LOG(...) __android_log_print(ANDROID_LOG_INFO, "Leaf", __VA_ARGS__)
 	#else
 		#include <stdio.h>
-		#define LOG(...) fprintf(stderr, __VA_ARGS__);
+		#define LOG(...) fprintf(stderr, "[LEAF]" __VA_ARGS__);
 	#endif
 #else
 	#define LOG(...)
@@ -230,6 +248,21 @@ static int Leaf__cxa_atexit(void (*func)(void *), void *arg, void *dso_handle) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Default dlopen, dlsym and dlclose callbacks
+//////////////////////////////////////////////
+static void *LeafDefaultDlopen(Leaf *self, const char *name) {
+	return dlopen(name, RTLD_NOW | RTLD_GLOBAL);
+}
+
+static void *LeafDefaultDlsym(Leaf *self, void *handle, const char *symbol) {
+	return dlsym(handle, symbol);
+}
+
+static void LeafDefaultDlclose(Leaf *self, void *handle) {
+	dlclose(handle);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Leaf itself
 //////////////
 
@@ -246,7 +279,23 @@ Leaf *LeafInit(void) {
 	
 	memset(self, 0, sizeof *self);
 	
+	self->dl_open = LeafDefaultDlopen;
+	self->dl_sym = LeafDefaultDlsym;
+	self->dl_close = LeafDefaultDlclose;
+	
 	return self;
+}
+
+static void *LeafDlopen(Leaf *self, const char *name) {
+	return self->dl_open(self, name);
+}
+
+static void *LeafDlsym(Leaf *self, void *handle, const char *name) {
+	return self->dl_sym(self, handle, name);
+}
+
+static void LeafDlclose(Leaf *self, void *handle) {
+	return self->dl_close(self, handle);
 }
 
 #define LEAF_ALIGN_UP(ADDR, ALIGN) ((ADDR) + ((ALIGN) - ((ADDR) % (ALIGN))))
@@ -322,6 +371,106 @@ void *LeafGetRealAddr(Leaf *self, size_t virt_addr) {
 	return NULL;
 }
 
+typedef struct LeafGnuHashTable {
+	/**
+	 * Structure of a GNU hash table, which has sadly never been formally
+	 * specified. What cocks the GNU Corporation are.
+	 * 
+	 * Keep in mind this uses chains to resolve collisions, so if you are only
+	 * fimilar with open addressing based collision resolution you may want to
+	 * freshen up on this before hacking on this code.
+	 * 
+	 * COMMENT: I personally don't like the design of this hash table. I see
+	 * the bloom filter as largely useless complexity (how many non-existent
+	 * symbol lookups occur in real world apps anyway?) and the lack of an easy
+	 * way to find the symbol count is a large fuck you to anyone who wants to
+	 * do something actually sane without relying on debug symbols existing.
+	 * 
+	 * SEE: https://flapenguin.me/elf-dt-gnu-hash
+	 * SEE: https://maskray.me/blog/2022-08-21-glibc-and-dt-gnu-hash
+	 */
+	
+	uint32_t num_buckets;
+	uint32_t sym_offset;
+	uint32_t bloom_size;
+	uint32_t bloom_shift;
+	unsigned char data[];
+	
+	// The above entry is provided so it's easier to access the symbol index
+	// chain. The actual structure, for anyone curious, is something like:
+	// 
+	// size_t bloom[bloom_size];
+	//     This stores the bloom table bitfield, this is actually pretty sane.
+	// 
+	// uint32_t buckets[num_buckets];
+	//     Stores the starting indexes of the buckets. Really should be named
+	//     "bucket_indexes".
+	// 
+	// uint32_t chain[num_symbols - sym_offset];
+	//     Really should be named "buckets". Each entry at some index I
+	//     corresponds to a symbol table entry at that same index.* An entry
+	//     contains the upper 31 bits of the hash of the symbol name in its
+	//     upper 31 bits to speed up name checking, and the lowest bit is set to
+	//     1 if the chain ends with this symbol or 0 if the chain continues.
+	// 
+	// The names of the "chains" and "buckets" are very misleading or at least
+	// very ambigous for anyone not fimilar with symbol hashing in ELF. Only
+	// buckets are part of the actual hash table. The "chains" just contain the
+	// stored hashes of the symbol names, and are used to speed up hashing and
+	// determine the end (size) of a bucket.
+	// 
+	// * Not taking the sym_offset into account. Stated more correctly the chain
+	// index for a symbol table index I is I - sym_offset.
+} LeafGnuHashTable;
+
+#define BUCKET_PTR(x) ((void *) &x->data[(sizeof(size_t) * x->bloom_size)])
+#define CHAIN_PTR(x) ((void *) &x->data[(sizeof(size_t) * x->bloom_size) + (sizeof(uint32_t) * x->num_buckets)])
+
+size_t LeafSymbolTableLengthFromGnuHash(LeafGnuHashTable *self_) {
+	/**
+	 * Find the length of a symbol table from a proprietary GNU hash table. We
+	 * do this by iterating over the entire hash chain searching for the highest
+	 * index.
+	 * 
+	 * I hope to god it works this time.
+	 */
+	
+	struct LeafGnuHashTable *self = self_;
+	uint32_t *buckets = BUCKET_PTR(self);
+	uint32_t *chains = CHAIN_PTR(self);
+	
+	// The highest valid index, as far as we're currently aware
+	uint32_t index = 0;
+	
+	// Find highest bucket starting index
+	// TODO: Are these always in order? If so we can search from the back for
+	// something much faster, but I don't think they are guaranteed to be
+	// that way.
+	for (uint32_t i = 0; i < self->num_buckets; i++) {
+		if (buckets[i] > index) {
+			index = buckets[i];
+		}
+	}
+	
+	// IIRC this means none of the buckets had anything
+	if (index == 0) {
+		return self->sym_offset;
+	}
+	
+	// Find index of last symbol in that chain to get last symbol in table
+	for (uint32_t l = 0;; l++) {
+		if (chains[(index - self->sym_offset) + l] & 1) {
+			index += l + 1;
+			break;
+		}
+	}
+	
+	return index;
+}
+
+#undef BUCKET_PTR
+#undef CHAIN_PTR
+
 const uint8_t ELF_SIGNATURE[] = {0x7f, 'E', 'L', 'F'};
 
 void LeafDoRela(Leaf *self, LeafRela *relocs, size_t reloc_count);
@@ -360,8 +509,8 @@ const char *LeafLoadFromBuffer(Leaf *self, void *contents, size_t length) {
 		return "Too new or invalid ELF version";
 	}
 	
-	if (self->ehdr->e_type != ET_DYN) {
-		return "Only loading shared objects is supported";
+	if (self->ehdr->e_type != ET_EXEC && self->ehdr->e_type != ET_DYN) {
+		return "Only executables and shared objects are supported";
 	}
 	
 	// TODO: e_machine
@@ -541,6 +690,11 @@ const char *LeafLoadFromBuffer(Leaf *self, void *contents, size_t length) {
 				sym_count = p[1];
 				break;
 			}
+			case DT_GNU_HASH: {
+				LeafGnuHashTable *ght = LeafGetRealAddr(self, dyns[i].d_un.d_val);
+				sym_count = LeafSymbolTableLengthFromGnuHash(ght);
+				break;
+			}
 			case DT_STRTAB: {
 				strtab = LeafGetRealAddr(self, dyns[i].d_un.d_val);
 				break;
@@ -660,7 +814,7 @@ const char *LeafLoadFromBuffer(Leaf *self, void *contents, size_t length) {
 	for (size_t i = 0; i < self->dl_handle_count; i++) {
 		LOG("Dep lib soname: %s\n", (char *)self->dl_handles[i]);
 		
-		self->dl_handles[i] = dlopen(self->dl_handles[i], RTLD_NOW | RTLD_GLOBAL);
+		self->dl_handles[i] = LeafDlopen(self, self->dl_handles[i]);
 		
 		if (!self->dl_handles[i]) {
 			LOG("Loading lib failed! Continuing anyways...\n");
@@ -694,7 +848,7 @@ const char *LeafLoadFromBuffer(Leaf *self, void *contents, size_t length) {
 				// that works in this case...
 				for (size_t j = 0; j < self->dl_handle_count; j++) {
 					if (self->dl_handles[j] != NULL) {
-						void *symbol_value = dlsym(self->dl_handles[j], symbol_name);
+						void *symbol_value = LeafDlsym(self, self->dl_handles[j], symbol_name);
 						
 						if (symbol_value) {
 							sym->st_value = (LeafAddr) symbol_value;
@@ -780,7 +934,6 @@ void LeafDoRela(Leaf *self, LeafRela *relocs, size_t reloc_count) {
 			// TODO other arches
 #ifdef __aarch64__
 			case R_AARCH64_RELATIVE: {
-				// LOG("R_AARCH64_RELATIVE 0x%zx 0x%zx\n", (size_t)rela->r_offset, (size_t)rela->r_addend);
 				// I think this works (?) since all symbols are zero in my case.
 				void *result = LeafGetRealAddr(self, rela->r_addend);
 				*((void **)where) = result;
@@ -788,14 +941,26 @@ void LeafDoRela(Leaf *self, LeafRela *relocs, size_t reloc_count) {
 			}
 			case R_AARCH64_GLOB_DAT:
 			case R_AARCH64_JUMP_SLOT: {
-				// LOG("R_AARCH64_GLOB_DAT/R_AARCH64_JUMP_SLOT 0x%zx 0x%zx\n", (size_t)rela->r_offset, (size_t)rela->r_addend);
+				LeafSym *sym = &self->symtab[LeafRelocSym(rela->r_info)];
+				*((size_t *)where) = sym->st_value + rela->r_addend;
+				break;
+			}
+#endif
+#ifdef __x86_64__
+			case R_X86_64_RELATIVE: {
+				void *result = LeafGetRealAddr(self, rela->r_addend);
+				*((void **)where) = result;
+				break;
+			}
+			case R_X86_64_GLOB_DAT:
+			case R_X86_64_JUMP_SLOT: {
 				LeafSym *sym = &self->symtab[LeafRelocSym(rela->r_info)];
 				*((size_t *)where) = sym->st_value + rela->r_addend;
 				break;
 			}
 #endif
 			default: {
-				LOG("Unknown reloc type: offset=0x%zx sym=0x%zx type=0x%zx addend=0x%zx\n", (size_t)rela->r_offset, (size_t)LeafRelocSym(rela->r_info), (size_t)LeafRelocType(rela->r_info), (size_t)rela->r_addend);
+				LOG("Unknown reloc: offset=0x%zx sym=0x%zx type=0x%zx addend=0x%zx\n", (size_t)rela->r_offset, (size_t)LeafRelocSym(rela->r_info), (size_t)LeafRelocType(rela->r_info), (size_t)rela->r_addend);
 				break;
 			}
 		}
@@ -855,7 +1020,7 @@ void LeafDoRel(Leaf *self, LeafRel *relocs, size_t reloc_count) {
 			}
 #endif
 			default: {
-				LOG("Unknown reloc type: offset=0x%zx sym=0x%zx type=0x%zx\n", (size_t)rel->r_offset, (size_t)LeafRelocSym(rel->r_info), (size_t)LeafRelocType(rel->r_info));
+				LOG("Unknown reloc: offset=0x%zx sym=0x%zx type=0x%zx\n", (size_t)rel->r_offset, (size_t)LeafRelocSym(rel->r_info), (size_t)LeafRelocType(rel->r_info));
 				break;
 			}
 		}
@@ -908,6 +1073,13 @@ const char *LeafLoadFromFile(Leaf *self, const char *path) {
 	return error;
 }
 
+bool LeafSetLoaderCallbacks(Leaf *self, LeafDlopenFunction open, LeafDlsymFunction sym, LeafDlcloseFunction close) {
+	self->dl_open = open ? open : self->dl_open;
+	self->dl_sym = sym ? sym : self->dl_sym;
+	self->dl_close = close ? close : self->dl_close;
+	return true;
+}
+
 void *LeafSymbolAddr(Leaf *self, const char *symbol_name) {
 	/**
 	 * Find the address of the given symbol.
@@ -947,7 +1119,7 @@ void LeafFinish(Leaf *self) {
 	 * with a global variable.
 	 */
 	
-	LOG("Calling %zu fini functions...", self->fini_count);
+	LOG("Calling %zu fini functions...\n", self->fini_count);
 	
 	// remember: run them backwards
 	for (size_t i = 1; i <= self->fini_count; i++) {
@@ -972,7 +1144,7 @@ void LeafFree(Leaf *self) {
 	// Close and free dl_handles
 	for (size_t i = 0; i < self->dl_handle_count; i++) {
 		if (self->dl_handles[i]) {
-			dlclose(self->dl_handles[i]);
+			LeafDlclose(self, self->dl_handles[i]);
 		}
 	}
 	

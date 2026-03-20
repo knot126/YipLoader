@@ -5,9 +5,9 @@ include $(CLEAR_VARS)
 
 LOCAL_ARM_MODE  := arm
 LOCAL_MODULE    := YipLoader
-LOCAL_SRC_FILES := yip/main.c \
+LOCAL_SRC_FILES := \
+	yip/main.c \
 	yip/util.c \
-	yip/knshim.c \
 	yip/loader.c \
 	yip/jnistuff.c \
 	yip/apkiter.c
