@@ -6,6 +6,16 @@
 #define _YIP_LOADER_H_
 
 #include <stdint.h>
+#include <android_native_app_glue.h>
+#include "extern/leaf.h"
+
+/**
+ * A generic buffer type
+ */
+typedef YipBuffer {
+	size_t size;
+	uint8_t *data;
+} YipBuffer;
 
 /**
  * Information about a specific mod
@@ -44,12 +54,20 @@ typedef struct YipModInfoStatic {
 	YipModInfoStatic * const next; // Next mod in the chain
 } YipModInfoStatic;
 
+/**
+ * Init, tick and destroy function types
+ */
+typedef void (*YipModConstructor)(void);
+
 // Utilities for mods (symbol lookup, getting current game, etc.)
 void *YipLookupSymbol(const char *symbol);
 void *YipHookFunction(const char *symbol, void *hook, bool replace);
-bool YipPatch(size_t vaddr, const uint8_t *data, size_t size);
+void *YipHookFunctionAt(size_t vaddr, void *hook, bool replace);
+bool YipPatch(size_t vaddr, YipBuffer buffer);
 
 const char *YipGetGameName(void);
+struct android_app *YipGetAndroidAppStruct(void);
+Leaf *YipGetLeafInstance(void);
 
 // Get first mod in the linked list of mods kept by YipLoader
 const YipModInfoStatic *YipGetModList(void);

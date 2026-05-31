@@ -32,20 +32,20 @@
  * the iterator, and the function returns `1` if the iteration should be
  * continued or `0` if it should be stopped after the current file.
  */
-typedef int (*APKIterationCallback)(void *context, const char *name);
+typedef int (*YipZipIterationCallback)(void *context, const char *name);
 
 /**
  * Possible result codes returned by YipLoader_ForEachZIPFileEntry().
  */
 enum {
-	KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR = -2,
-	KN_ZIP_ITERATOR_IO_ERROR = -1,
-	KN_ZIP_ITERATOR_FULLY_FINISHED = 0,
-	KN_ZIP_ITERATOR_PARTLY_FINISHED = 1,
+	YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR = -2,
+	YIP_ZIP_ITERATOR_IO_ERROR = -1,
+	YIP_ZIP_ITERATOR_FULLY_FINISHED = 0,
+	YIP_ZIP_ITERATOR_PARTLY_FINISHED = 1,
 };
 
 /**
  * Iterate over each local file header in a ZIP file, calling callback each time
  * a new filename is found.
  */
-int YipLoader_ForEachZIPFileEntry(const char *zip_path, void *user_context, APKIterationCallback callback);
+int YipLoader_ForEachZIPFileEntry(const char *zip_path, void *user_context, YipZipIterationCallback callback);

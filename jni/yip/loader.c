@@ -3,7 +3,7 @@
  * 
  * -----------------------------------------------------------------------------
  * 
- * This file is part of KnShim. Copyright (c) 2025 Knot126.
+ * This file is part of KnShim. Copyright (c) 2025 - 2026 Knot126.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -269,7 +269,27 @@ static bool YipLoader_ModMatchesCriteria(YipModInfo *mod, YipModInfo *crit) {
 }
 
 static void YipLoader_ValidateMods(void) {
+	/**
+	 * TODO: seriously we should probably validate the mods at least A LITTLE
+	 */
+}
+
+static void YipLoader_InitMods(void) {
+	/**
+	 * Call mod_init() functions.
+	 */
 	
+	YipLoader *current = gModChain;
+	
+	while (current) {
+		YipModConstructor init = dlsym(current->dl_handle, "mod_init");
+		
+		if (init) {
+			init();
+		}
+		
+		current = current->next;
+	}
 }
 
 const char *YipLoader_LoadMods(void) {
@@ -288,6 +308,9 @@ const char *YipLoader_LoadMods(void) {
 		LogE("YipLoader_ForEachZIPFileEntry returned %d", error);
 		return "Failed to find modules for loading";
 	}
+	
+	YipLoader_ValidateMods();
+	YipLoader_InitMods();
 	
 	return NULL;
 }

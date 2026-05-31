@@ -32,11 +32,11 @@
 #define READ_TYPE(F, V) fread(&V, sizeof V, 1, F)
 #define READ(F, S, B) fread(B, S, 1, F)
 
-int YipLoader_ForEachZIPFileEntry(const char *zip_path, void *user_context, APKIterationCallback callback) {
+int YipLoader_ForEachZIPFileEntry(const char *zip_path, void *user_context, YipZipIterationCallback callback) {
 	FILE *file = fopen(zip_path, "rb");
 	
 	if (!file) {
-		return KN_ZIP_ITERATOR_IO_ERROR;
+		return YIP_ZIP_ITERATOR_IO_ERROR;
 	}
 	
 	unsigned char magic[4];
@@ -52,7 +52,7 @@ int YipLoader_ForEachZIPFileEntry(const char *zip_path, void *user_context, APKI
 		
 		if (READ(file, 4, magic) != 1) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		if (magic[0] != 0x50 || magic[1] != 0x4B || magic[2] != 0x03 || magic[3] != 0x04) {
@@ -62,48 +62,48 @@ int YipLoader_ForEachZIPFileEntry(const char *zip_path, void *user_context, APKI
 		// Skip version
 		if (fseek(file, 2, SEEK_CUR)) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		// Read flags
 		if (READ_TYPE(file, flags) != 1) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		// skip a ton of feilds to get to compressed size
 		if (fseek(file, 10, SEEK_CUR)) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		if (READ_TYPE(file, compressed_size) != 1) {
 			LogI("3");
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		// skip uncompressed size
 		if (fseek(file, 4, SEEK_CUR)) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		if (READ_TYPE(file, file_name_length) != 1) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		if (READ_TYPE(file, extra_field_length) != 1) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		char filename_buf[file_name_length+1];
 		
 		if (READ(file, file_name_length, filename_buf) != 1) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		filename_buf[file_name_length] = '\0';
@@ -112,38 +112,38 @@ int YipLoader_ForEachZIPFileEntry(const char *zip_path, void *user_context, APKI
 		
 		if (!status) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED;
 		}
 		
 		// Skip extra data
 		if (fseek(file, extra_field_length, SEEK_CUR)) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		// Skip file data
 		if (fseek(file, compressed_size, SEEK_CUR)) {
 			fclose(file);
-			return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+			return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 		}
 		
 		// Skip stupidity
 		if (flags & 0x8) {
 			if (READ(file, 4, magic) != 1) {
 				fclose(file);
-				return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+				return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 			}
 			
 			if (magic[0] != 0x50 || magic[1] != 0x4B || magic[2] != 0x07 || magic[3] != 0x08) {
 				if (fseek(file, 0x8, SEEK_CUR)) {
 					fclose(file);
-					return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+					return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 				}
 			}
 			else {
 				if (fseek(file, 0xC, SEEK_CUR)) {
 					fclose(file);
-					return KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
+					return YIP_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR;
 				}
 			}
 		}
@@ -151,5 +151,5 @@ int YipLoader_ForEachZIPFileEntry(const char *zip_path, void *user_context, APKI
 	
 	fclose(file);
 	
-	return KN_ZIP_ITERATOR_FULLY_FINISHED;
+	return YIP_ZIP_ITERATOR_FULLY_FINISHED;
 }

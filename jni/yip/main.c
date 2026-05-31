@@ -29,11 +29,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#ifdef GRANNY
-#warning "Granny smith builds are not reliable yet!"
-#endif
-
 #include "util.h"
+#include "arch.h"
 #include "loader.h"
 
 typedef void (*AndroidMainFunc)(struct android_app *app);
@@ -54,7 +51,7 @@ void android_main(struct android_app *app) {
 		abort();
 	}
 	
-	LogI("YipLoader release %s (for %s); App SDK %d, Device SDK %d", SHIM_VERSION, KN_ARCH_STRING, KNGetAppSDK(), KNGetDeviceSDK());
+	LogI("YipLoader release %s (for %s); App SDK %d, Device SDK %d", SHIM_VERSION, KN_ARCH_STRING, YipLoader_GetAppSDK(), YipLoader_GetDeviceSDK());
 	
 	// Load game
 	status = YipLoader_LoadGame();

@@ -29,11 +29,13 @@
 #include "extern/leaf.h"
 
 /* Globals */
-extern Leaf *gLeaf;
 extern struct android_app *gApp;
-
+extern Leaf *gLeaf;
 extern void *gLibAndroid;
 extern void *gLibC;
+extern char *gGameName;
+extern char *gPackageCodePath;
+extern YipModInfo *gModChain;
 
 /* Create/destroy YipLoader functions */
 const char *YipLoader_EarlyInit(void);
