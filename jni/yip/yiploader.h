@@ -6,7 +6,6 @@
 #define _YIP_LOADER_H_
 
 #include <stdint.h>
-#include <android_native_app_glue.h>
 #include "extern/leaf.h"
 
 /**
@@ -64,6 +63,8 @@ void *YipLookupSymbol(const char *symbol);
 void *YipHookFunction(const char *symbol, void *hook, bool replace);
 void *YipHookFunctionAt(size_t vaddr, void *hook, bool replace);
 bool YipPatch(size_t vaddr, YipBuffer buffer);
+
+struct android_app;
 
 const char *YipGetGameName(void);
 struct android_app *YipGetAndroidAppStruct(void);

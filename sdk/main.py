@@ -57,12 +57,12 @@ YipModInfo mod_info = {{
 	.description = "{desc.encode('unicode-escape').decode('utf-8')}",
 	.game = "{game.encode('unicode-escape').decode('utf-8')}",
 	.version = 10000,
-	.assumes = yiploader_version,
+	.assumes = &yiploader_version,
 	.conflicts = NULL,
 }};
 """)
 	
-	Path(f"jni/{name}/main.c").write_text("#include <yiploader/yiploader.h>\n\nconst char *mod_init(void) {\n\t// Code to init your mod goes here!\n}")
+	Path(f"jni/{name}/main.c").write_text("#include <yiploader/yiploader.h>\n\nconst char *mod_init(void) {\n\t// Code to init your mod goes here!\n\treturn NULL;\n}")
 	
 	print("Generate makefiles...")
 	Path(f"jni/Application.mk").write_text("APP_ABI := arm64-v8a armeabi-v7a\nAPP_PLATFORM := android-19\n")
@@ -80,7 +80,7 @@ include $(CLEAR_VARS)
 LOCAL_ARM_MODE  := arm
 
 # Your module's name
-LOCAL_MODULE    := {name}
+LOCAL_MODULE    := {name}.{game}
 
 # The source files for your module. Don't remove mod_info.c; it's required!
 LOCAL_SRC_FILES := {name}/mod_info.c \\\n\t{name}/main.c
@@ -92,7 +92,7 @@ LOCAL_SRC_FILES := {name}/mod_info.c \\\n\t{name}/main.c
 LOCAL_SHARED_LIBRARIES := yip-prebuilt
 
 # Include YipLoader's headers
-LOCAL_C_INCLUDES := yip
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/yip
 
 # Consider providing C flags
 # LOCAL_CFLAGS     := -DDUMMY
@@ -101,7 +101,7 @@ include $(BUILD_SHARED_LIBRARY)""")
 	
 	print("Copy pre-built libraries and headers...")
 	os.makedirs("jni/yip/yiploader", exist_ok=True)
-	shutil.copyfile(f"{SDK_DIR}/jni/yip/yiploader.h", f"jni/yip/yiploader/yiploader.h")
+	shutil.copytree(f"{SDK_DIR}/jni/yip", f"jni/yip/yiploader", dirs_exist_ok=True)
 	shutil.copytree(f"{SDK_DIR}/libs/", f"jni/yip", dirs_exist_ok=True)
 
 def build():
