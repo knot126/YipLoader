@@ -47,7 +47,7 @@ void android_main(struct android_app *app) {
 	gApp = app;
 	
 	// Early shim init
-	status = KnShim_EarlyInit();
+	status = YipLoader_EarlyInit();
 	
 	if (status) {
 		LogF("Early init failed: %s", status);
@@ -57,7 +57,7 @@ void android_main(struct android_app *app) {
 	LogI("YipLoader release %s (for %s); App SDK %d, Device SDK %d", SHIM_VERSION, KN_ARCH_STRING, KNGetAppSDK(), KNGetDeviceSDK());
 	
 	// Load game
-	status = KnShim_LoadGame();
+	status = YipLoader_LoadGame();
 	
 	if (status) {
 		LogF("Loading game failed: %s", status);
@@ -65,7 +65,7 @@ void android_main(struct android_app *app) {
 	}
 	
 	// Load mods + later shim init
-	status = KnShim_LoadMods();
+	status = YipLoader_LoadMods();
 	
 	if (status) {
 		LogF("Failed to load mods: %s", status);

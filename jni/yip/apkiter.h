@@ -3,7 +3,7 @@
  * 
  * -----------------------------------------------------------------------------
  * 
- * This file is part of KnShim. Copyright (c) 2025 Knot126.
+ * This file is part of KnShim. Copyright (c) 2025 - 2026 Knot126.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -35,7 +35,7 @@
 typedef int (*APKIterationCallback)(void *context, const char *name);
 
 /**
- * Possible result codes returned by KnShim_ForEachZIPFileEntry().
+ * Possible result codes returned by YipLoader_ForEachZIPFileEntry().
  */
 enum {
 	KN_ZIP_ITERATOR_PARTLY_FINISHED_WITH_IO_ERROR = -2,
@@ -48,4 +48,4 @@ enum {
  * Iterate over each local file header in a ZIP file, calling callback each time
  * a new filename is found.
  */
-int KnShim_ForEachZIPFileEntry(const char *zip_path, void *user_context, APKIterationCallback callback);
+int YipLoader_ForEachZIPFileEntry(const char *zip_path, void *user_context, APKIterationCallback callback);

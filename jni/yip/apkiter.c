@@ -3,7 +3,7 @@
  * 
  * -----------------------------------------------------------------------------
  * 
- * This file is part of KnShim. Copyright (c) 2025 Knot126.
+ * This file is part of KnShim. Copyright (c) 2025 - 2026 Knot126.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,7 @@
 #define READ_TYPE(F, V) fread(&V, sizeof V, 1, F)
 #define READ(F, S, B) fread(B, S, 1, F)
 
-int KnShim_ForEachZIPFileEntry(const char *zip_path, void *user_context, APKIterationCallback callback) {
+int YipLoader_ForEachZIPFileEntry(const char *zip_path, void *user_context, APKIterationCallback callback) {
 	FILE *file = fopen(zip_path, "rb");
 	
 	if (!file) {

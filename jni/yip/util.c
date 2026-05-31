@@ -86,8 +86,6 @@ bool KNPatch(size_t vaddr, const char *bytes, size_t size) {
 	
 	char *addr = LeafGetRealAddr(gLeaf, vaddr);
 	
-	// LogI("KNPatch: vaddr=%p bytes=%p size=%zu paddr=%p", vaddr, bytes, size, addr);
-	
 	if (!addr) {
 		return false;
 	}

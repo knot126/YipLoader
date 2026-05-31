@@ -3,7 +3,7 @@
  * 
  * -----------------------------------------------------------------------------
  * 
- * This file is part of KnShim. Copyright (c) 2025 Knot126.
+ * This file is part of KnShim. Copyright (c) 2025 - 2026 Knot126.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -35,11 +35,11 @@ extern struct android_app *gApp;
 extern void *gLibAndroid;
 extern void *gLibC;
 
-/* Create/destroy the shim functions */
-const char *KnShim_EarlyInit(void);
-const char *KnShim_Init(void);
-void KnShim_Release(void);
+/* Create/destroy YipLoader functions */
+const char *YipLoader_EarlyInit(void);
+const char *YipLoader_Init(void);
+void YipLoader_Release(void);
 
 /* Load game */
-const char *KnShim_LoadGame(void);
-const char *KnShim_LoadMods(void);
+const char *YipLoader_LoadGame(void);
+const char *YipLoader_LoadMods(void);

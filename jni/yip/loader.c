@@ -38,6 +38,7 @@
 #include "jnistuff.h"
 #include "apkiter.h"
 #include "loader.h"
+#include "yiploader.h"
 
 /* Shim-wide globals. They are kept here since they are used here most. */
 struct android_app *gApp;
@@ -48,7 +49,7 @@ char *gGameName;
 char *gPackageCodePath;
 
 /* Early init, init, and release */
-const char *KnShim_EarlyInit(void) {
+const char *YipLoader_EarlyInit(void) {
 	/**
 	 * Initialise some core stuff the shim needs. This happens *before* Smash
 	 * Hit is loaded.
@@ -73,17 +74,17 @@ const char *KnShim_EarlyInit(void) {
 	return NULL;
 }
 
-const char *KnShim_Init(void) {
-	atexit(&KnShim_Release);
+const char *YipLoader_Init(void) {
+	atexit(&YipLoader_Release);
 	return NULL;
 }
 
-void KnShim_Release(void) {
+void YipLoader_Release(void) {
 	LeafFree(gLeaf);
 }
 
 /* Game loading */
-static inline AAsset *KnShim_LoadMainSharedObject(const char *path, const void **data, size_t *length) {
+static inline AAsset *YipLoader_LoadMainSharedObject(const char *path, const void **data, size_t *length) {
 	AAssetManager *asset_manager = gApp->activity->assetManager;
 	
 	AAsset *asset = AAssetManager_open(asset_manager, path, AASSET_MODE_BUFFER);
@@ -98,7 +99,7 @@ static inline AAsset *KnShim_LoadMainSharedObject(const char *path, const void *
 	return asset;
 }
 
-static inline char *KnShim_FindGameObject(void) {
+static inline char *YipLoader_FindGameObject(void) {
 	/**
 	 * Find any single shared object in the native/<current-arch> path and 
 	 * return the path to it. This is a fairly clean way to load the game .so
@@ -121,7 +122,7 @@ finally:
 	return filename;
 }
 
-static inline char *KnShim_NameOfGameFromObjectPath(const char *path) {
+static inline char *YipLoader_NameOfGameFromObjectPath(const char *path) {
 	/**
 	 * Parse out the name of the game from the given object path. Returned
 	 * string should be freed (unless you rely on the OS to do that after
@@ -145,7 +146,7 @@ static inline char *KnShim_NameOfGameFromObjectPath(const char *path) {
 	return strndup(lib, end - lib);
 }
 
-const char *KnShim_LoadGame(void) {
+const char *YipLoader_LoadGame(void) {
 	/**
 	 * Find and load the main game binary
 	 */
@@ -158,7 +159,7 @@ const char *KnShim_LoadGame(void) {
 	}
 	
 	// Find shared object path for this game
-	char *so_path = KnShim_FindGameObject();
+	char *so_path = YipLoader_FindGameObject();
 	
 	if (!so_path) {
 		return "Could not find any shared object for the current archiecture";
@@ -167,7 +168,7 @@ const char *KnShim_LoadGame(void) {
 	LogI("Found game object: %s", so_path);
 	
 	// Find name of game
-	gGameName = KnShim_NameOfGameFromObjectPath(so_path);
+	gGameName = YipLoader_NameOfGameFromObjectPath(so_path);
 	
 	if (!gGameName) {
 		return "Could not parse game name from object path";
@@ -178,7 +179,7 @@ const char *KnShim_LoadGame(void) {
 	// Load the contents of the game's library
 	const void *data;
 	size_t length;
-	AAsset *asset = KnShim_LoadMainSharedObject(so_path, &data, &length);
+	AAsset *asset = YipLoader_LoadMainSharedObject(so_path, &data, &length);
 	
 	if (!asset) {
 		return "Failed to load game shared object from shim native dir";
@@ -199,26 +200,12 @@ const char *KnShim_LoadGame(void) {
 	return NULL;
 }
 
-/* Modules */
+/* Handle mods themselves */
+YipModInfo *gModChain;
 
-// The new, better, cooler modules
-typedef struct Mod Mod;
-
-typedef struct Mod {
-	const char *name;
-	const char *description;
-	const char *game;
-	unsigned int *version;
-	void *handle;
-	struct Mod *next;
-} Mod;
-
-Mod *gModChain;
-
-static int KnShim_ZIPFileNameIterationCallback(void *context, const char *name) {
-	// Cock if this is module
+static int YipLoader_ZIPFileNameIterationCallback(void *context, const char *name) {
+	// Check if this is a mod
 	if (strncmp(name, "lib/" KN_ARCH_STRING "/lib", strlen("lib/" KN_ARCH_STRING "/lib"))) {
-		// LogI("Excluding %s: not a library file", name);
 		return 1;
 	}
 	
@@ -232,41 +219,61 @@ static int KnShim_ZIPFileNameIterationCallback(void *context, const char *name) 
 	
 	name += 4;
 	
-	// Allocate module node
-	Mod *mod = malloc(sizeof *mod);
-	
-	if (!mod) {
-		LogE("Failed to allocate memory for module %s", name);
-		return 1;
-	}
-	
-	mod->next = gModChain;
-	
 	// Actually start to load it
 	LogI("Will now load %s as a module", name);
 	
-	mod->handle = dlopen(name, RTLD_NOW | RTLD_GLOBAL);
+	void *handle = dlopen(name, RTLD_NOW | RTLD_GLOBAL);
 	
 	char *error = dlerror();
 	
 	if (error) {
-		LogE("Failed to load module %s: %s", name, error);
-		free(mod);
+		LogE("Failed to load module %s: %s. Check that the mod isn't corrupt.", name, error);
 		return 1;
 	}
 	
-	mod->name = dlsym(mod->handle, "ModName");
-	mod->description = dlsym(mod->handle, "ModDescription");
-	mod->game = dlsym(mod->handle, "ModGame");
-	mod->version = dlsym(mod->handle, "ModVersion");
+	YipModInfo *mod_info = dlsym(handle, "mod_info");
 	
-	gModChain = mod;
+	error = dlerror();
+	
+	if (error) {
+		LogE("Failed to load module %s: %s. Check that the mod contains a valid 'mod_info' symbol.", name, error);
+		dlclose(handle);
+		return 1;
+	}
+	
+	mod_info->next = gModChain;
+	mod_info->dl_handle = handle;
+	gModChain = mod_info;
 	
 	return 1;
 }
 
-const char *KnShim_LoadMods(void) {
-	gPackageCodePath = KnShim_GetPackageCodePath();
+static bool YipLoader_ModMatchesCriteria(YipModInfo *mod, YipModInfo *crit) {
+	if (crit->version != 0 && mod->version != crit->version) {
+		return false;
+	}
+	
+	if (crit->name && strcmp(mod->name, crit->name)) {
+		return false;
+	}
+	
+	if (crit->author && strcmp(mod->author, crit->author)) {
+		return false;
+	}
+	
+	if (crit->game && strcmp(crit->game, "*") && strcmp(mod->game, crit->game)) {
+		return false;
+	}
+	
+	return true;
+}
+
+static void YipLoader_ValidateMods(void) {
+	
+}
+
+const char *YipLoader_LoadMods(void) {
+	gPackageCodePath = YipLoader_GetPackageCodePath();
 	
 	if (gPackageCodePath) {
 		LogI("Found package code path: %s", gPackageCodePath);
@@ -275,10 +282,10 @@ const char *KnShim_LoadMods(void) {
 		return "Could not get package code path";
 	}
 	
-	int error = KnShim_ForEachZIPFileEntry(gPackageCodePath, NULL, KnShim_ZIPFileNameIterationCallback);
+	int error = YipLoader_ForEachZIPFileEntry(gPackageCodePath, NULL, YipLoader_ZIPFileNameIterationCallback);
 	
 	if (error) {
-		LogE("KnShim_ForEachZIPFileEntry returned %d", error);
+		LogE("YipLoader_ForEachZIPFileEntry returned %d", error);
 		return "Failed to find modules for loading";
 	}
 	

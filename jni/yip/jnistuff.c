@@ -3,7 +3,7 @@
  * 
  * -----------------------------------------------------------------------------
  * 
- * This file is part of KnShim. Copyright (c) 2024 - 2025 Knot126.
+ * This file is part of KnShim. Copyright (c) 2024 - 2026 Knot126.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -38,7 +38,7 @@
 	}\
 }
 
-static jmethodID KnShim_GetMethodID(JNIEnv *jni, const char *className, const char *methodName, const char *methodSignature) {
+static jmethodID YipLoader_GetMethodID(JNIEnv *jni, const char *className, const char *methodName, const char *methodSignature) {
 	jclass theClass = (*jni)->FindClass(jni, className);
 	
 	JNI_EXCEPTION_ABORT(jni, "jni_get_method_id(%p, %s, %s, %s): Exception pending error", jni, className, methodName, methodSignature);
@@ -50,7 +50,7 @@ static jmethodID KnShim_GetMethodID(JNIEnv *jni, const char *className, const ch
 	return theMethod;
 }
 
-static jfieldID KnShim_GetFieldID(JNIEnv *jni, const char *className, const char *fieldName, const char *fieldSignature) {
+static jfieldID YipLoader_GetFieldID(JNIEnv *jni, const char *className, const char *fieldName, const char *fieldSignature) {
 	jclass theClass = (*jni)->FindClass(jni, className);
 	
 	JNI_EXCEPTION_ABORT(jni, "jni_get_field_id(%p, %s, %s, %s): Exception pending error", jni, className, fieldName, fieldSignature);
@@ -79,7 +79,7 @@ static jfieldID KnShim_GetFieldID(JNIEnv *jni, const char *className, const char
 		} \
 	}
 
-char *KnShim_GetPackageCodePath(void) {
+char *YipLoader_GetPackageCodePath(void) {
 	/**
 	 * Get the path to the application's primary APK (which is itself a ZIP
 	 * file). Similar to Context#getPackageCodePath.
@@ -88,7 +88,7 @@ char *KnShim_GetPackageCodePath(void) {
 	JNI_GET_ENV();
 	
 	jobject nativeActivity = gApp->activity->clazz;
-	jmethodID getPackageCodePath = KnShim_GetMethodID(jni, "android/app/NativeActivity", "getPackageCodePath", "()Ljava/lang/String;");
+	jmethodID getPackageCodePath = YipLoader_GetMethodID(jni, "android/app/NativeActivity", "getPackageCodePath", "()Ljava/lang/String;");
 	
 	jstring codePathObj = (*jni)->CallObjectMethod(jni, nativeActivity, getPackageCodePath);
 	JNI_EXCEPTION_ABORT(jni, "pending exception after nativeActivity.getPackageName()");
