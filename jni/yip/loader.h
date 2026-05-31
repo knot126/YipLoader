@@ -27,6 +27,7 @@
 #pragma once
 
 #include "extern/leaf.h"
+#include "yiploader.h"
 
 /* Globals */
 extern struct android_app *gApp;

@@ -31,35 +31,47 @@ from pathlib import Path
 SDK_DIR = str(Path(__file__).parent.parent)
 
 def create():
-	print("Welcome to the KnShim SDK extension creator.")
+	print("Welcome to the YipLoader SDK project generator.")
 	print("Please fill in some information about your project.")
 	print()
 	game = input("Game name: ")
 	name = input("Project name: ")
+	author = input("Project author: ")
 	desc = input("Description: ")
 	print()
 	
 	print("Generate info...")
 	os.makedirs(f"jni/{name}", exist_ok=True)
 	
-	Path(f"jni/{name}/extinfo.c").write_text(f"""// Automatically generated information about this module.
+	Path(f"jni/{name}/mod_info.c").write_text(f"""// Automatically generated information about this modification.
+#include <yiploader/yiploader.h>
 
-const char ModName[] = "{name.encode('unicode-escape').decode('utf-8')}";
-const char ModDescription[] = "{desc.encode('unicode-escape').decode('utf-8')}";
-const char ModGame[] = "{game.encode('unicode-escape').decode('utf-8')}";
-const int ModVersion = 10000;
+YipModInfo yiploader_version = {{
+	.name = "YipLoader",
+	.version = 1,
+}};
+
+YipModInfo mod_info = {{
+	.name = "{name.encode('unicode-escape').decode('utf-8')}",
+	.author = "{author.encode('unicode-escape').decode('utf-8')}",
+	.description = "{desc.encode('unicode-escape').decode('utf-8')}",
+	.game = "{game.encode('unicode-escape').decode('utf-8')}",
+	.version = 10000,
+	.assumes = yiploader_version,
+	.conflicts = NULL,
+}};
 """)
 	
-	Path(f"jni/{name}/main.c").write_text("#include <knshim/knshim.h>\n\nconst char *ModInit(void) {\n\treturn NULL;\n}")
+	Path(f"jni/{name}/main.c").write_text("#include <yiploader/yiploader.h>\n\nconst char *mod_init(void) {\n\t// Code to init your mod goes here!\n}")
 	
 	print("Generate makefiles...")
-	Path(f"jni/Application.mk").write_text("APP_ABI := arm64-v8a armeabi-v7a\nAPP_PLATFORM := android-26\n")
+	Path(f"jni/Application.mk").write_text("APP_ABI := arm64-v8a armeabi-v7a\nAPP_PLATFORM := android-19\n")
 	Path(f"jni/Android.mk").write_text(f"""LOCAL_PATH := $(call my-dir)
 
 # Setup KnShim related stuff
 include $(CLEAR_VARS)
-LOCAL_MODULE := shim-prebuilt
-LOCAL_SRC_FILES := shim/$(TARGET_ARCH_ABI)/libshim.so
+LOCAL_MODULE := yip-prebuilt
+LOCAL_SRC_FILES := yip/$(TARGET_ARCH_ABI)/libYipLoader.so
 include $(PREBUILT_SHARED_LIBRARY)
 
 # This is the setup for YOUR project!
@@ -70,17 +82,17 @@ LOCAL_ARM_MODE  := arm
 # Your module's name
 LOCAL_MODULE    := {name}
 
-# The source files for your module. Don't remove extinfo.c; it's required!
-LOCAL_SRC_FILES := {name}/extinfo.c \\\n\t{name}/main.c
+# The source files for your module. Don't remove mod_info.c; it's required!
+LOCAL_SRC_FILES := {name}/mod_info.c \\\n\t{name}/main.c
 
 # Link against any extra libraries you might need here
 # LOCAL_LDLIBS     := -llog -landroid -lGLESv2
 
-# Link against KnShim itself
-LOCAL_SHARED_LIBRARIES := shim-prebuilt
+# Link against YipLoader itself
+LOCAL_SHARED_LIBRARIES := yip-prebuilt
 
-# Include KnShim's headers
-LOCAL_C_INCLUDES := shim
+# Include YipLoader's headers
+LOCAL_C_INCLUDES := yip
 
 # Consider providing C flags
 # LOCAL_CFLAGS     := -DDUMMY
@@ -88,9 +100,9 @@ LOCAL_C_INCLUDES := shim
 include $(BUILD_SHARED_LIBRARY)""")
 	
 	print("Copy pre-built libraries and headers...")
-	os.makedirs("jni/shim/knshim", exist_ok=True)
-	shutil.copyfile(f"{SDK_DIR}/jni/shim/knshim.h", f"jni/shim/knshim/knshim.h")
-	shutil.copytree(f"{SDK_DIR}/libs/", f"jni/shim", dirs_exist_ok=True)
+	os.makedirs("jni/yip/yiploader", exist_ok=True)
+	shutil.copyfile(f"{SDK_DIR}/jni/yip/yiploader.h", f"jni/yip/yiploader/yiploader.h")
+	shutil.copytree(f"{SDK_DIR}/libs/", f"jni/yip", dirs_exist_ok=True)
 
 def build():
 	os.system('ndk-build')
@@ -105,6 +117,8 @@ def main():
 			create()
 		case 'build':
 			build()
+		case _:
+			print(f"Unknown option: {sys.argv[1]}")
 
 if __name__ == "__main__":
 	main()

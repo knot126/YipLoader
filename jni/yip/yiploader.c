@@ -44,7 +44,7 @@ void *YipLookupSymbol(const char *symbol) {
 	 * Get the address of a symbol in the main game binary.
 	 */
 	
-	return LeafSymbolAddr(gLeaf, name);
+	return LeafSymbolAddr(gLeaf, symbol);
 }
 
 LHHooker *gHookingContext;
@@ -87,9 +87,12 @@ void *YipHookFunction(const char *symbol, void *hook, bool replace) {
 
 void *YipHookFunctionAt(size_t vaddr, void *hook, bool replace) {
 	/**
-	 * Hook a function given the symbol name, the hook to use, and weather or
+	 * Hook a function given its base address, the hook to use, and weather or
 	 * not to replace the function entirely or to return a pointer to the
 	 * original.
+	 * 
+	 * In almost all cases, you should be using YipHookFunction as it's far more
+	 * version agonostic.
 	 * 
 	 * If replace is false, then the original function pointer is returned on
 	 * success. If replace is true, then the address of the symbol is returned
@@ -98,7 +101,7 @@ void *YipHookFunctionAt(size_t vaddr, void *hook, bool replace) {
 	
 	ENSURE_HOOKING_CONTEXT();
 	
-	void *func = LeafGetRealAddr(gLeaf, );
+	void *func = LeafGetRealAddr(gLeaf, vaddr);
 	void *orig = func;
 	
 	if (LHHookerHookFunction(gHookingContext, func, hook, replace ? NULL : &orig)) {

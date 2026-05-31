@@ -12,7 +12,7 @@
 /**
  * A generic buffer type
  */
-typedef YipBuffer {
+typedef struct YipBuffer {
 	size_t size;
 	uint8_t *data;
 } YipBuffer;

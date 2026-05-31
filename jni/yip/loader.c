@@ -35,6 +35,7 @@
 #undef LEAF_IMPLEMENTATION
 
 #include "util.h"
+#include "arch.h"
 #include "jnistuff.h"
 #include "apkiter.h"
 #include "loader.h"
@@ -279,7 +280,7 @@ static void YipLoader_InitMods(void) {
 	 * Call mod_init() functions.
 	 */
 	
-	YipLoader *current = gModChain;
+	YipModInfo *current = gModChain;
 	
 	while (current) {
 		YipModConstructor init = dlsym(current->dl_handle, "mod_init");
