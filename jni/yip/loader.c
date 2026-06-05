@@ -204,7 +204,11 @@ const char *YipLoader_LoadGame(void) {
 /* Handle mods themselves */
 YipModInfo *gModChain;
 
-static int YipLoader_ZIPFileNameIterationCallback(void *context, const char *name) {
+typedef struct YipModIterationContext {
+	bool hadError;
+} YipModIterationContext;
+
+static int YipLoader_ZIPFileNameIterationCallback(YipModIterationContext *context, const char *name) {
 	// Check if this is a mod
 	if (strncmp(name, "lib/" KN_ARCH_STRING "/lib", strlen("lib/" KN_ARCH_STRING "/lib"))) {
 		return 1;
@@ -233,18 +237,22 @@ static int YipLoader_ZIPFileNameIterationCallback(void *context, const char *nam
 		
 		if (error) {
 			LogE("Failed to load module %s: %s. Check that the mod isn't corrupt.", name, error);
+			context->hadError = true;
 			return 1;
 		}
 	}
 	
 	YipModInfo *mod_info = dlsym(handle, "mod_info");
 	
+	// While returning NULL doesn't technically mean there was an error, we
+	// expect it to be non-NULL in our case anyway.
 	if (!mod_info) {
 		error = dlerror();
 		
 		if (error) {
 			LogE("Failed to load module %s: %s. Check that the mod contains a valid 'mod_info' symbol.", name, error);
 			dlclose(handle);
+			context->hadError = true;
 			return 1;
 		}
 	}
@@ -304,6 +312,8 @@ static void YipLoader_InitMods(void) {
 }
 
 const char *YipLoader_LoadMods(void) {
+	YipModIterationContext zip_iteration_context = {};
+	
 	gPackageCodePath = YipLoader_GetPackageCodePath();
 	
 	if (gPackageCodePath) {
@@ -313,11 +323,15 @@ const char *YipLoader_LoadMods(void) {
 		return "Could not get package code path";
 	}
 	
-	int error = YipLoader_ForEachZIPFileEntry(gPackageCodePath, NULL, YipLoader_ZIPFileNameIterationCallback);
+	int error = YipLoader_ForEachZIPFileEntry(gPackageCodePath, &zip_iteration_context, (void *) YipLoader_ZIPFileNameIterationCallback);
 	
 	if (error) {
 		LogE("YipLoader_ForEachZIPFileEntry returned %d", error);
 		return "Failed to find modules for loading";
+	}
+	
+	if (zip_iteration_context->hadError) {
+		return "Errors occured while loading some mods (see log for details)";
 	}
 	
 	YipLoader_ValidateMods();
