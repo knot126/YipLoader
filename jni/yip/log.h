@@ -28,7 +28,7 @@
 
 #include <android/log.h>
 
-#define TAG "knshim"
+#define TAG "YipLoader"
 
 #define LogI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LogW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)

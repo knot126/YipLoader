@@ -218,28 +218,38 @@ static int YipLoader_ZIPFileNameIterationCallback(void *context, const char *nam
 		return 1;
 	}
 	
-	name += 4;
+	// skip the "lib/" KN_ARCH_STRING "/" bit
+	name += 4 + strlen(KN_ARCH_STRING) + 1;
 	
 	// Actually start to load it
 	LogI("Will now load %s as a module", name);
 	
 	void *handle = dlopen(name, RTLD_NOW | RTLD_GLOBAL);
 	
-	char *error = dlerror();
+	char *error = NULL;
 	
-	if (error) {
-		LogE("Failed to load module %s: %s. Check that the mod isn't corrupt.", name, error);
-		return 1;
+	if (!handle) {
+		error = dlerror();
+		
+		if (error) {
+			LogE("Failed to load module %s: %s. Check that the mod isn't corrupt.", name, error);
+			return 1;
+		}
 	}
 	
 	YipModInfo *mod_info = dlsym(handle, "mod_info");
 	
-	error = dlerror();
-	
-	if (error) {
-		LogE("Failed to load module %s: %s. Check that the mod contains a valid 'mod_info' symbol.", name, error);
-		dlclose(handle);
-		return 1;
+	if (!mod_info) {
+		error = dlerror();
+		
+		if (error) {
+			LogE("Failed to load module %s: %s. Check that the mod contains a valid 'mod_info' symbol.", name, error);
+			dlclose(handle);
+			return 1;
+		}
+	}
+	else {
+		LogI("Loaded mod %s by %s version %d", mod_info->name, mod_info->author, mod_info->version);
 	}
 	
 	mod_info->next = gModChain;
