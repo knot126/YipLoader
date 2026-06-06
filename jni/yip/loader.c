@@ -204,6 +204,15 @@ const char *YipLoader_LoadGame(void) {
 /* Handle mods themselves */
 YipModInfo *gModChain;
 
+/* YipLoader's own mod info structure */
+YipModInfo yiploader_mod_info = {
+	.name = "YipLoader",
+	.author = "knot126",
+	.description = "Mod loader for Android games",
+	.game = NULL,
+	.version = 1,
+};
+
 typedef struct YipModIterationContext {
 	bool hadError;
 } YipModIterationContext;
@@ -287,13 +296,78 @@ static bool YipLoader_ModMatchesCriteria(YipModInfo *mod, YipModInfo *crit) {
 	return true;
 }
 
-static void YipLoader_ValidateMods(void) {
+static bool YipLoader_ValidateMod(YipModInfo *mod_info) {
+	bool valid = true;
+	
+	// Check dependencies
+	YipModInfo *current = mod_info->assumes;
+	
+	while (current) {
+		// Check against YipLoader itself
+		if (YipLoader_ModMatchesCriteria(&yiploader_mod_info, current)) {
+			goto valid;
+		}
+		
+		// Find it in mod chain
+		YipModInfo *candidate = gModChain;
+		
+		while (candidate) {
+			if (YipLoader_ModMatchesCriteria(candidate, current)) {
+				goto valid;
+			}
+		}
+		
+		LogE("Dependency validation for mod %s failed: depends on %s version %d, but mod was not found!", mod_info->name, current->name, current->version);
+		
+		valid = false;
+		
+	valid:
+		current = current->next;
+	}
+	
+	// Check for conflicting mods
+	current = mod_info->conflicts;
+	
+	while (current) {
+		YipModInfo *candidate = gModChain;
+		
+		while (candidate) {
+			if (YipLoader_ModMatchesCriteria(candidate, current)) {
+				LogE("Conflict validation for mod %s failed: conflicts with %s version %d", mod_info->name, candidate->name, candidate->version);
+				valid = false;
+				continue;
+			}
+			
+			candidate = candidate->next;
+		}
+		
+		current = current->next;
+	}
+	
+	return valid;
+}
+
+static bool YipLoader_ValidateMods(void) {
 	/**
 	 * TODO: seriously we should probably validate the mods at least A LITTLE
 	 */
+	
+	bool valid = true;
+	
+	YipModInfo *mod = gModChain;
+	
+	while (mod) {
+		if (!YipLoader_ValidateMod(mod)) {
+			valid = false;
+		}
+		
+		mod = mod->next;
+	}
+	
+	return valid;
 }
 
-static void YipLoader_InitMods(void) {
+static bool YipLoader_InitMods(void) {
 	/**
 	 * Call mod_init() functions.
 	 */
@@ -309,6 +383,8 @@ static void YipLoader_InitMods(void) {
 		
 		current = current->next;
 	}
+	
+	return true;
 }
 
 const char *YipLoader_LoadMods(void) {
@@ -330,12 +406,17 @@ const char *YipLoader_LoadMods(void) {
 		return "Failed to find modules for loading";
 	}
 	
-	if (zip_iteration_context->hadError) {
+	if (zip_iteration_context.hadError) {
 		return "Errors occured while loading some mods (see log for details)";
 	}
 	
-	YipLoader_ValidateMods();
-	YipLoader_InitMods();
+	if (!YipLoader_ValidateMods()) {
+		return "Could not validate mods";
+	}
+	
+	if (!YipLoader_InitMods()) {
+		return "Could not init mods";
+	}
 	
 	return NULL;
 }
