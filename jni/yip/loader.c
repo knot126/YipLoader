@@ -277,6 +277,10 @@ static int YipLoader_ZIPFileNameIterationCallback(YipModIterationContext *contex
 }
 
 static bool YipLoader_ModMatchesCriteria(YipModInfo *mod, YipModInfo *crit) {
+	if (mod == crit) {
+		return true;
+	}
+	
 	if (crit->version != 0 && mod->version != crit->version) {
 		return false;
 	}
@@ -365,6 +369,45 @@ static bool YipLoader_ValidateMods(void) {
 	}
 	
 	return valid;
+}
+
+static void YipLoader_MoveBehind(YipModInfo *mod_info, YipModInfo *crit) {
+	/**
+	 * Ensure the mod matching mod_info is behind the one matching crit
+	 */
+	
+	YipModInfo *current = gModChain;
+	
+	YipModInfo *old_prev = NULL;
+	YipModInfo *old_current = NULL;
+	YipModInfo *new_prev = NULL;
+	
+	while (current) {
+		if (YipLoader_ModMatchesCriteria(current, crit)) {
+			if (old_prev && old_current) {
+				// Remove from its current position
+				old_prev->next = old_current->next;
+				
+				// Insert at new position, after the current (our dep)
+				old_current->next = current->next;
+				current->next = old_current;
+			}
+			else {
+				// Otherwise, we're already behind this mod, so we have nothing
+				// to do.
+			}
+			
+			return;
+		}
+		else if (YipLoader_ModMatchesCriteria(current, mod_info)) {
+			// If we encouter this before exit, we're ahead and need to move
+			old_prev = new_prev;
+			old_current = old_current;
+		}
+		
+		new_prev = current;
+		current = current->next;
+	}
 }
 
 static bool YipLoader_InitMods(void) {
