@@ -24,7 +24,7 @@ Getting Started
 ===============
 
 .. note:: The developer exprience is currently quite rough and will improve in
-the future.
+   the future.
 
 As far as prerequsites go, please install any version of the Android NDK, and
 optionally add the NDK to your path.

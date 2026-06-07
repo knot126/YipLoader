@@ -20,6 +20,24 @@ Android games that provides a minimal but functional API.
    :maxdepth: 2
    :caption: Contents:
 
+Getting Started
+===============
+
+.. note:: The developer exprience is currently quite rough and will improve in
+   the future.
+
+As far as prerequsites go, please install any version of the Android NDK, and
+optionally add the NDK to your path.
+
+To automatically generate the basic structure of a mod project, open a terminal
+in an empty directory where you wish to store your project, then use the
+YipLoader SDK to generate a project:
+
+   python <path to SDK directory> create
+
+You will be asked for some basic information about your mod, then your mod files
+will be generated.
+
 Data Types
 ==========
 
