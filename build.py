@@ -2,6 +2,7 @@
 import os
 import shutil
 import sys
+from pathlib import Path
 
 status = os.system(f"ndk-build")
 
@@ -17,5 +18,6 @@ if not status:
 			print(f"No APKs to upgrade")
 	
 	if "--package" in sys.argv:
-		version = sys.argv[sys.argv.index("--package")+1]
-		shutil.make_archive(f"knshim-r{version}-{game}-libs", "zip", "./libs")
+		version = Path("RELEASE").read_text().strip()
+		print(f"Package release as version {version}...")
+		shutil.make_archive(f"yiploader-v{version}-libs", "zip", "./libs")
