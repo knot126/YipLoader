@@ -1,4 +1,4 @@
-<img src="logo/FoxthingText.png" style="width: 100%"/>
+<img src="logo/yiploader_powered.png" style="width: 100%"/>
 
 # YipLoader
 
