@@ -54,6 +54,10 @@ Data Types
    The data as a byte pointer
 
    .. note:: If :c:member:`data` is ``NULL``, then :c:member:`size` must be zero. 
+   
+   .. c:macro:: YipDestroyBuffer(BUFFER)
+      
+      Calls ``free(BUFFER.data)``, destroying a dynamically allocated buffer.
 
 .. c:struct:: YipModInfo
 
@@ -154,7 +158,20 @@ function info
 
    Patch a specific chunk of memory, given the buffer to replace it with and the virtual address of that chunk. The chunk of memory must be within the game binary and is given relative to the ELF virtual base address.
    
+   .. tip:: If what you are doing is possible using hooks, please use them instead as they tend to be more version-agnostic and don't break as much between upgrades.
+   
+   .. seealso::
+      
+      :c:func:`YipPatchv2`
+         Which optionally allows retrieving the original data
+   
+.. c:function:: bool YipPatchv2(size_t vaddr, YipBuffer buffer, YipBuffer *original)
+   
+   Patch a specific chunk of memory, given the buffer to replace it with and the virtual address of that chunk, and optionally copy the original data of that chunk of memory into a buffer. The chunk of memory must be within the game binary and is given relative to the ELF virtual base address.
+   
    .. tip:: If what you are doing is possible using hooks, please use them instead as they tend to be more version-agnostic and don't break as much between upgrades. 
+   
+   .. important:: If ``original`` points to a buffer, it should be freed using :c:macro:`YipDestroyBuffer`.
    
 .. c:function:: const char *YipGetGameName(void)
 

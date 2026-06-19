@@ -117,10 +117,32 @@ bool YipPatch(size_t vaddr, YipBuffer buffer) {
 	 * with the bytes from the given `buffer`.
 	 */
 	
+	return YipPatchv2(vaddr, buffer, NULL);
+}
+
+bool YipPatchv2(size_t vaddr, YipBuffer buffer, YipBuffer *original) {
+	/**
+	 * Patch the bytes starting at the virtual address vaddr by replacing them
+	 * with the bytes from the given `buffer`. If original is not NULL, then
+	 * a copy of the original bytes is put into a malloc()'d buffer (which must
+	 * be freed by the user).
+	 */
+	
 	char *addr = LeafGetRealAddr(gLeaf, vaddr);
 	
 	if (!addr) {
 		return false;
+	}
+	
+	if (original) {
+		original->size = buffer.size;
+		original->data = malloc(buffer.size);
+		
+		if (!original->data) {
+			return false;
+		}
+		
+		memcpy(original->data, addr, buffer.size);
 	}
 	
 	memcpy(addr, buffer.data, buffer.size);

@@ -63,8 +63,11 @@ void *YipLookupSymbol(const char *symbol);
 void *YipHookFunction(const char *symbol, void *hook, bool replace);
 void *YipHookFunctionAt(size_t vaddr, void *hook, bool replace);
 bool YipPatch(size_t vaddr, YipBuffer buffer);
+bool YipPatchv2(size_t vaddr, YipBuffer buffer, YipBuffer *original);
 
 struct android_app;
+
+#define YipDestroyBuffer(BUFFER) (free((BUFFER).data))
 
 const char *YipGetGameName(void);
 struct android_app *YipGetAndroidAppStruct(void);
