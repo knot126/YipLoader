@@ -32,9 +32,14 @@
 /// @section leafhook_setup
 #if defined(__ARM_ARCH_7A__)
 #define LH_AARCH32
+#define LH_HOOK_SIZE 12
 #elif defined(__aarch64__)
 #define LH_AARCH64
+#define LH_HOOK_SIZE 16
+#else
+#define LH_HOOK_SIZE (-1)
 #endif
+
 #define LEAFHOOK_IMPLEMENTATION
 #include "extern/leafhook.h"
 /// end of that
@@ -75,7 +80,14 @@ void *YipHookFunction(const char *symbol, void *hook, bool replace) {
 	
 	ENSURE_HOOKING_CONTEXT();
 	
-	void *func = YipLookupSymbol(symbol);
+	LeafSym *sym_info = LeafSymbolInfo(gLeaf, symbol);
+	
+	// We can't hook small functions for now.
+	if (sym_info->st_size < LH_HOOK_SIZE) {
+		return NULL;
+	}
+	
+	void *func = (void *) sym_info->st_value;
 	void *orig = func;
 	
 	if (LHHookerHookFunction(gHookingContext, func, hook, replace ? NULL : &orig)) {
