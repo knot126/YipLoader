@@ -61,14 +61,6 @@ void android_main(struct android_app *app) {
 		abort();
 	}
 	
-	// Post load game
-	status = YipLoader_PostLoadGame();
-	
-	if (status) {
-		LogF("Post load game setup failed: %s", status);
-		abort();
-	}
-	
 	// Load mods + later shim init
 	status = YipLoader_LoadMods();
 	

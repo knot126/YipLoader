@@ -41,7 +41,6 @@
 #include <errno.h>
 #include <dlfcn.h>
 #include <unistd.h>
-#include <stdint.h>
 
 #if defined(__arm__) || defined(__i386__)
 #define LEAF_32BIT
@@ -89,42 +88,24 @@ typedef struct LeafLoadedSegment {
 	void *addr;
 	size_t orig_addr;
 	size_t size;
-	size_t orig_flags;
 } LeafLoadedSegment;
 
-typedef struct LeafParams {
-	// Request a fixed load address for ELFs which can be loaded at any address.
-	// Set to 0/NULL to disable this feature.
-	size_t load_address;
-	
-	// Leaf can optionally allocate an extra segment before and/or after the
-	// main binary, so that hooking libraries can hook small functions by first
-	// jumping into a trampoline located in these segments, which then does
-	// the actual jump, or so that users can add their own code and patch the
-	// binary to jump to it.
-	size_t pre_extra_size;
-	size_t post_extra_size;
-} LeafParams;
-
 typedef struct Leaf {
-	// User data - this can be used to provide a user-defined context for
-	// callback functions like the custom dlopen, dlsym, and dlclose
-	// implementations.
-	void *user_data;
-	
 	// Headers
 	LeafEhdr *ehdr;
 	LeafPhdr **phdrs;
 	
 	// Segments of the program
+	// 
+	// Originally to implement loading things aligned I was going to load
+	// segments sparsely, but it seems like that doesn't work with SH.
 	LeafLoadedSegment *segments;
 	size_t segment_count;
-	bool fixed;
 	
-	// For position indepentent objects, Leaf loads all segments into one huge
-	// block of memory. TODO: Is this okay behaviour?
+#ifndef LEAF_LOAD_SPARSE
 	void *block;
 	size_t block_size;
+#endif
 	
 	// dlopen() handles for libs required by this ELF
 	void **dl_handles;
@@ -158,8 +139,6 @@ typedef struct Leaf {
 	LeafDlopenFunction dl_open;
 	LeafDlsymFunction dl_sym;
 	LeafDlcloseFunction dl_close;
-	
-	LeafParams params;
 } Leaf;
 
 typedef struct LeafStream {
@@ -168,40 +147,16 @@ typedef struct LeafStream {
 	size_t pos;
 } LeafStream;
 
-#define LEAF_EXTRA_PRE (-1)
-#define LEAF_EXTRA_POST (-2)
-
-Leaf *LeafInit(const LeafParams *params);
+Leaf *LeafInit(void);
 bool LeafSetLoaderCallbacks(Leaf *self, LeafDlopenFunction open, LeafDlsymFunction sym, LeafDlcloseFunction close);
-const char *LeafLoad(Leaf *self, LeafStream *stream);
 const char *LeafLoadFromBuffer(Leaf *self, void *contents, size_t length);
 const char *LeafLoadFromFile(Leaf *self, const char *path);
-void *LeafGetEntryPoint(Leaf *self);
 void *LeafSymbolAddr(Leaf *self, const char *symbol_name);
 LeafSym *LeafSymbolInfo(Leaf *self, const char *symbol_name);
 void *LeafGetRealAddr(Leaf *self, size_t virt_addr);
-void *LeafGetSegment(Leaf *self, int64_t index, size_t *segment_size);
 void LeafFree(Leaf *self);
 
 #ifdef LEAF_IMPLEMENTATION
-
-/******************************************************************************
- * Welcome to the Leaf codebase! Here are some general documents you should
- * find helpful while hacking on Leaf:
- * 
- * - ELF Spec: https://gabi.xinuos.com/
- *             https://github.com/xinuos/gabi
- * 
- * - System V ABI Base: https://www.sco.com/developers/gabi/latest/contents.html
- * 
- * - AArch32/64 ABI: https://github.com/ARM-software/abi-aa
- * - i386       ABI: http://www.sco.com/developers/devspecs/abi386-4.pdf
- * - AMD64      ABI: https://gitlab.com/x86-psABIs/x86-64-ABI
- * (OS dev wiki has more: https://wiki.osdev.org/System_V_ABI)
- * 
- * Please note that in Leaf we generally care about the loading side of things,
- * so for example sections are not relevant to what we do.
- ******************************************************************************/
 
 // Logging stuff dependent on platform
 #ifndef LEAF_NO_LOGGING
@@ -253,10 +208,6 @@ static size_t LeafStreamReadInto(LeafStream *self, size_t count, void *buffer) {
 }
 
 static void *LeafStreamRead(LeafStream *self, size_t count) {
-	/**
-	 * Read `count` bytes from the stream into a dynamically allocated buffer.
-	 */
-	
 	if (self->pos + count > self->size) {
 		return NULL;
 	}
@@ -315,7 +266,7 @@ static void LeafDefaultDlclose(Leaf *self, void *handle) {
 // Leaf itself
 //////////////
 
-Leaf *LeafInit(const LeafParams *params) {
+Leaf *LeafInit(void) {
 	/**
 	 * Initialise a new instance of Leaf with the given parameters.
 	 */
@@ -327,10 +278,6 @@ Leaf *LeafInit(const LeafParams *params) {
 	}
 	
 	memset(self, 0, sizeof *self);
-	
-	if (params) {
-		self->params = *params;
-	}
 	
 	self->dl_open = LeafDefaultDlopen;
 	self->dl_sym = LeafDefaultDlsym;
@@ -353,8 +300,6 @@ static void LeafDlclose(Leaf *self, void *handle) {
 
 #define LEAF_ALIGN_UP(ADDR, ALIGN) ((ADDR) + ((ALIGN) - ((ADDR) % (ALIGN))))
 #define LEAF_ALIGN_DOWN(ADDR, ALIGN) ((ADDR) - ((ADDR) % (ALIGN)))
-#define LEAF_MAP_RWX (PROT_READ | PROT_WRITE | PROT_EXEC)
-#define LEAF_MAP_PRIVANON (MAP_PRIVATE | MAP_ANONYMOUS)
 
 static void *LeafMakeMap(size_t size, size_t alignment) {
 	/**
@@ -372,7 +317,7 @@ static void *LeafMakeMap(size_t size, size_t alignment) {
 	const size_t req_size = size + alignment;
 	
 	// Map memory
-	void * const addr = mmap(NULL, req_size, LEAF_MAP_RWX, LEAF_MAP_PRIVANON, -1, 0);
+	void * const addr = mmap(NULL, req_size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	
 	if (addr == MAP_FAILED) {
 		return MAP_FAILED;
@@ -405,14 +350,6 @@ static void *LeafMakeMap(size_t size, size_t alignment) {
 	
 	// Finally return aligned address
 	return (void *) aligned_addr;
-}
-
-static void *LeafMakeFixedMap(size_t addr, size_t size) {
-	/**
-	 * Make an RWX, ANON memory map at a specific fixed address.
-	 */
-	
-	return mmap((void *) addr, size, LEAF_MAP_RWX, LEAF_MAP_PRIVANON | MAP_FIXED, -1, 0);
 }
 
 #define LEAF_IN_RANGE(A, X, B) ((X >= A) && (X < B))
@@ -489,7 +426,7 @@ typedef struct LeafGnuHashTable {
 #define BUCKET_PTR(x) ((void *) &x->data[(sizeof(size_t) * x->bloom_size)])
 #define CHAIN_PTR(x) ((void *) &x->data[(sizeof(size_t) * x->bloom_size) + (sizeof(uint32_t) * x->num_buckets)])
 
-static size_t LeafSymbolTableLengthFromGnuHash(LeafGnuHashTable *self_) {
+size_t LeafSymbolTableLengthFromGnuHash(LeafGnuHashTable *self_) {
 	/**
 	 * Find the length of a symbol table from a proprietary GNU hash table. We
 	 * do this by iterating over the entire hash chain searching for the highest
@@ -536,13 +473,19 @@ static size_t LeafSymbolTableLengthFromGnuHash(LeafGnuHashTable *self_) {
 
 const uint8_t ELF_SIGNATURE[] = {0x7f, 'E', 'L', 'F'};
 
-static bool LeafIsPositionIndependent(Leaf *self, LeafDyn *dyns);
-static void LeafDoRela(Leaf *self, LeafRela *relocs, size_t reloc_count);
-static void LeafDoRel(Leaf *self, LeafRel *relocs, size_t reloc_count);
+void LeafDoRela(Leaf *self, LeafRela *relocs, size_t reloc_count);
+void LeafDoRel(Leaf *self, LeafRel *relocs, size_t reloc_count);
 static void LeafDoInit(Leaf *self);
-static const char *LeafProcessDynamicSegment(Leaf *self, LeafDyn *dyns);
 
-const char *LeafLoad(Leaf *self, LeafStream *stream) {
+const char *LeafLoadFromBuffer(Leaf *self, void *contents, size_t length) {
+	/**
+	 * Returns a string containing details of the error that occured, or NULL
+	 * on success
+	 */
+	
+	// Init a read stream
+	LeafStream *stream = LeafStreamInit(contents, length);
+	
 	// Read header
 	self->ehdr = LeafStreamRead(stream, sizeof *self->ehdr);
 	
@@ -620,75 +563,58 @@ const char *LeafLoad(Leaf *self, LeafStream *stream) {
 	
 	// Initialise segment structures, map memory and load segments
 	LeafDyn *dyns = NULL;
-	size_t min_vaddr = (size_t)-1;
+#ifndef LEAF_LOAD_SPARSE
 	size_t max_vaddr = 0;
 	size_t max_align = 0;
-	bool pie = false;
+#endif
 	
 	for (size_t i = 0, j = 0; i < phnum; i++) {
 		LeafPhdr *phdr = self->phdrs[i];
 		
 		if (self->phdrs[i]->p_type == PT_LOAD) {
-			min_vaddr = (phdr->p_vaddr < min_vaddr) ? phdr->p_vaddr : min_vaddr;
+#ifdef LEAF_LOAD_SPARSE
+			LeafLoadedSegment *seg = &self->segments[j];
+			
+			// Mind that for Leaf we ignore the flags (permissions) and always
+			// use RWX. Maybe in the future we could only mark RW for pages
+			// without execute but I don't think that's a problem right now.
+			seg->addr = LeafMakeMap(phdr->p_memsz, phdr->p_align);
+			seg->size = phdr->p_memsz;
+			seg->orig_addr = phdr->p_vaddr;
+			
+			if (seg->addr == MAP_FAILED) {
+				return strerror(errno);
+			}
+			
+			// Load segment contents, or at least the ones we're supposed to
+			LeafStreamSetpos(stream, phdr->p_offset);
+			LeafStreamReadInto(stream, phdr->p_filesz, seg->addr);
+			
+			LOG("Section %zu  Addr=%p Size=0x%zx OrigAddr=0x%zx End=%p\n", j, seg->addr, seg->size, seg->orig_addr, seg->addr + seg->size);
+			
+			j++;
+#else
 			max_vaddr = ((phdr->p_vaddr + phdr->p_memsz) > max_vaddr) ? (phdr->p_vaddr + phdr->p_memsz) : max_vaddr;
 			max_align = (phdr->p_align > max_align) ? phdr->p_align : max_align;
+#endif
 		}
 		else if (phdr->p_type == PT_DYNAMIC) {
 			// TODO: I'd like to actually load the dynamic segment into
 			// permanent memory.
 			LeafStreamSetpos(stream, phdr->p_offset);
 			dyns = LeafStreamGetptr(stream);
-			
-			// Get if this is PIC - we need this in order to determine if a
-			// static executable is PIE or not
-			pie = LeafIsPositionIndependent(self, dyns);
 		}
 	}
 	
-	// This seems to be sufficent for determining if an ELF can be located
-	// anywhere in memory, or if it must be placed in a fixed spot. Obviously
-	// ET_DYN can be relocated by definition. For executables, this only seems
-	// to occur if they have the PIE flag set. It's technically possible for a
-	// non-PIE ET_EXEC to contain relative relocations, but that's stupid and
-	// no one does it nor should they ever.
-	self->fixed = (self->ehdr->e_type == ET_EXEC) && !pie;
+#ifndef LEAF_LOAD_SPARSE
+	LOG("Non sparse : LeafMakeMap(size=0x%zx, align=0x%zx)\n", max_vaddr, max_align);
 	
-	LOG("This ELF is a %s\n", (self->ehdr->e_type == ET_DYN) ? "Dynamic Shared Object" : ((pie) ? "Position-Independent Executable" : "Absolute-Address Executable"));
-	
-	// Make pre-ELF extra size aligned so we don't fuck alignment up :)
-	if (self->params.pre_extra_size % max_align) {
-		self->params.pre_extra_size += max_align - (self->params.pre_extra_size % max_align);
-	}
-	
-	LOG("Pre-ELF extra size adjusted to 0x%zx\n", self->params.pre_extra_size);
-	
-	if (self->fixed) {
-		// LOG("Solid LeafMakeFixedMap(addr=0x%zx, size=0x%zx)\n", min_vaddr, max_vaddr - min_vaddr);
-		
-		self->block_size = max_vaddr - min_vaddr;
-		const size_t map_size = self->block_size + self->params.pre_extra_size + self->params.post_extra_size;
-		self->block = LeafMakeFixedMap(min_vaddr - self->params.pre_extra_size, map_size);
-	}
-	else {
-		// LOG("Solid LeafMakeMap(size=0x%zx, align=0x%zx)\n", max_vaddr, max_align);
-		
-		self->block_size = max_vaddr;
-		const size_t map_size = self->block_size + self->params.pre_extra_size + self->params.post_extra_size;
-		
-		if (self->params.load_address) {
-			self->block = LeafMakeFixedMap(self->params.load_address - self->params.pre_extra_size, map_size);
-		}
-		else {
-			self->block = LeafMakeMap(map_size, max_align);
-		}
-	}
+	self->block_size = max_vaddr;
+	self->block = LeafMakeMap(max_vaddr, max_align);
 	
 	if (self->block == MAP_FAILED) {
-		return "Anonymous memory map failed";
+		return "Non sparse block allocation failed";
 	}
-	
-	// Make block point past pre-ELF extra part
-	self->block += self->params.pre_extra_size;
 	
 	// *sigh* I don't really want to loop over everything a third goddamn time,
 	// but I've been forced here. I was originally going to implement "spare"
@@ -701,10 +627,9 @@ const char *LeafLoad(Leaf *self, LeafStream *stream) {
 		if (self->phdrs[i]->p_type == PT_LOAD) {
 			LeafLoadedSegment *seg = &self->segments[j];
 			
-			seg->addr = self->fixed ? (void *)phdr->p_vaddr : self->block + phdr->p_vaddr;
+			seg->addr = self->block + phdr->p_vaddr;
 			seg->size = phdr->p_memsz;
 			seg->orig_addr = phdr->p_vaddr;
-			seg->orig_flags = phdr->p_flags;
 			
 			LOG("Segment %zu  Addr=%p Size=0x%zx OrigAddr=0x%zx\n", j, seg->addr, seg->size, seg->orig_addr);
 			
@@ -714,33 +639,13 @@ const char *LeafLoad(Leaf *self, LeafStream *stream) {
 			
 			j++;
 		}
-		// TODO: Thread Local Storage
+	}
+#endif
+	
+	if (!dyns) {
+		return "Failed to find dynamic info";
 	}
 	
-	if (dyns) {
-		const char *status = LeafProcessDynamicSegment(self, dyns);
-		
-		if (status) {
-			return status;
-		}
-	}
-	
-	return NULL;
-}
-
-static bool LeafIsPositionIndependent(Leaf *self, LeafDyn *dyns) {
-	for (size_t i = 0; dyns[i].d_tag != DT_NULL; i++) {
-		switch (dyns[i].d_tag) {
-			case DT_FLAGS_1: {
-				return (dyns[i].d_un.d_val & DF_1_PIE) == DF_1_PIE;
-			}
-		}
-	}
-	
-	return false;
-}
-
-static const char *LeafProcessDynamicSegment(Leaf *self, LeafDyn *dyns) {
 	// Get information from dynamic segment
 	// WARNING: Lots of unimplemented stuff here, only implemented what's from
 	// libsmashhit.so
@@ -917,7 +822,7 @@ static const char *LeafProcessDynamicSegment(Leaf *self, LeafDyn *dyns) {
 	}
 	
 	// Reloc everything in symbol table, load external symbols
-	// TODO Break this out into its own thing
+	// TODO
 	LOG("Have %zd symbols, fixing up symbol table...\n", sym_count);
 	
 	for (size_t i = 1; i < sym_count; i++) {
@@ -934,12 +839,13 @@ static const char *LeafProcessDynamicSegment(Leaf *self, LeafDyn *dyns) {
 				break;
 			}
 			case SHN_UNDEF: {
-				// resolve the symbol in the dumest way possible
-				// TODO: also probably not technically correct since ELF has
-				// stricter search order requirements than this but
-				// whatever, it works for now.
+				// resolve the symbol in the dumest way possible, also probably
+				// not technically correct since ELF has stricter ordering
+				// requirements than this but whateverthefuck.
 				const char *symbol_name = strtab + sym->st_name;
 				
+				// dlsym(NULL, symbol_name) would be smarter but not sure if
+				// that works in this case...
 				for (size_t j = 0; j < self->dl_handle_count; j++) {
 					if (self->dl_handles[j] != NULL) {
 						void *symbol_value = LeafDlsym(self, self->dl_handles[j], symbol_name);
@@ -997,7 +903,6 @@ static const char *LeafProcessDynamicSegment(Leaf *self, LeafDyn *dyns) {
 	size_t reloc_count = reloc_size / reloc_ent_size;
 	size_t plt_reloc_count = plt_relocs_size / reloc_ent_size;
 	
-	// TODO: There can be both.
 	if (reloc_types == DT_RELA) {
 		LOG("Will preform %zu relocations (DT_RELA)...\n", reloc_count);
 		LeafDoRela(self, relocs, reloc_count);
@@ -1014,10 +919,12 @@ static const char *LeafProcessDynamicSegment(Leaf *self, LeafDyn *dyns) {
 	// Call init functions
 	LeafDoInit(self);
 	
+	LeafStreamFree(stream); // TODO free if it fails
+	
 	return NULL;
 }
 
-static void LeafDoRela(Leaf *self, LeafRela *relocs, size_t reloc_count) {
+void LeafDoRela(Leaf *self, LeafRela *relocs, size_t reloc_count) {
 	for (size_t i = 0; i < reloc_count; i++) {
 		LeafRela *rela = &relocs[i];
 		
@@ -1045,16 +952,6 @@ static void LeafDoRela(Leaf *self, LeafRela *relocs, size_t reloc_count) {
 				*((void **)where) = result;
 				break;
 			}
-			case R_X86_64_IRELATIVE: {
-				// R_X86_64_IRELATIVE is similar to R_X86_64_RELATIVE except
-				// that the value [...] is the program address returned by the
-				// function, which takes no arguments, at the address of the
-				// result of the corresponding R_X86_64_RELATIVE relocation.
-				void *result = LeafGetRealAddr(self, rela->r_addend);
-				result = ((void *(*)(void)) result)();
-				*((void **)where) = result;
-				break;
-			}
 			case R_X86_64_GLOB_DAT:
 			case R_X86_64_JUMP_SLOT: {
 				LeafSym *sym = &self->symtab[LeafRelocSym(rela->r_info)];
@@ -1063,14 +960,14 @@ static void LeafDoRela(Leaf *self, LeafRela *relocs, size_t reloc_count) {
 			}
 #endif
 			default: {
-				LOG("Unknown or unsupported reloc: offset=0x%zx sym=0x%zx type=0x%zx addend=0x%zx\n", (size_t)rela->r_offset, (size_t)LeafRelocSym(rela->r_info), (size_t)LeafRelocType(rela->r_info), (size_t)rela->r_addend);
+				LOG("Unknown reloc: offset=0x%zx sym=0x%zx type=0x%zx addend=0x%zx\n", (size_t)rela->r_offset, (size_t)LeafRelocSym(rela->r_info), (size_t)LeafRelocType(rela->r_info), (size_t)rela->r_addend);
 				break;
 			}
 		}
 	}
 }
 
-static void LeafDoRel(Leaf *self, LeafRel *relocs, size_t reloc_count) {
+void LeafDoRel(Leaf *self, LeafRel *relocs, size_t reloc_count) {
 	for (size_t i = 0; i < reloc_count; i++) {
 		LeafRel *rel = &relocs[i];
 		
@@ -1123,7 +1020,7 @@ static void LeafDoRel(Leaf *self, LeafRel *relocs, size_t reloc_count) {
 			}
 #endif
 			default: {
-				LOG("Unknown or unsupported reloc: offset=0x%zx sym=0x%zx type=0x%zx\n", (size_t)rel->r_offset, (size_t)LeafRelocSym(rel->r_info), (size_t)LeafRelocType(rel->r_info));
+				LOG("Unknown reloc: offset=0x%zx sym=0x%zx type=0x%zx\n", (size_t)rel->r_offset, (size_t)LeafRelocSym(rel->r_info), (size_t)LeafRelocType(rel->r_info));
 				break;
 			}
 		}
@@ -1142,22 +1039,6 @@ void LeafDoInit(Leaf *self) {
 			func();
 		}
 	}
-}
-
-const char *LeafLoadFromBuffer(Leaf *self, void *contents, size_t length) {
-	/**
-	 * Returns a string containing details of the error that occured, or NULL
-	 * on success
-	 */
-	
-	LeafStream *stream = LeafStreamInit(contents, length);
-	if (!stream) {
-		return "Failed to allocate LeafStream";
-	}
-	const char *status = LeafLoad(self, stream);
-	LeafStreamFree(stream);
-	
-	return status;
 }
 
 const char *LeafLoadFromFile(Leaf *self, const char *path) {
@@ -1193,22 +1074,10 @@ const char *LeafLoadFromFile(Leaf *self, const char *path) {
 }
 
 bool LeafSetLoaderCallbacks(Leaf *self, LeafDlopenFunction open, LeafDlsymFunction sym, LeafDlcloseFunction close) {
-	/**
-	 * Set callbacks to use for the dynamic linker instead of the defaults.
-	 */
-	
 	self->dl_open = open ? open : self->dl_open;
 	self->dl_sym = sym ? sym : self->dl_sym;
 	self->dl_close = close ? close : self->dl_close;
 	return true;
-}
-
-void *LeafGetEntryPoint(Leaf *self) {
-	/**
-	 * Get the entry point for this ELF.
-	 */
-	
-	return (void *) self->ehdr->e_entry;
 }
 
 void *LeafSymbolAddr(Leaf *self, const char *symbol_name) {
@@ -1241,42 +1110,6 @@ LeafSym *LeafSymbolInfo(Leaf *self, const char *symbol_name) {
 	}
 	
 	return NULL;
-}
-
-void *LeafGetSegment(Leaf *self, int64_t index, size_t *segment_size) {
-	/**
-	 * Get information about segments in the ELF. The index can be either an
-	 * index from 0 (the first segment) to one less than the number of segments
-	 * (for the last segment) for regular segments, or the special values
-	 * LEAF_EXTRA_PRE and LEAF_EXTRA_POST for user pre- and post-ELF extra
-	 * data areas respectively.
-	 * 
-	 * If the segment size is not needed, it can be set to NULL.
-	 * 
-	 * If the index is invalid, this returns NULL and sets segment_size to 0.
-	 */
-	
-	void *ptr = NULL;
-	size_t size = 0;
-	
-	if (index >= 0 && index < self->segment_count) {
-		ptr = self->segments[index].addr;
-		size = self->segments[index].size;
-	}
-	else if (index == LEAF_EXTRA_PRE) {
-		ptr = self->block - self->params.pre_extra_size;
-		size = self->params.pre_extra_size;
-	}
-	else if (index == LEAF_EXTRA_POST) {
-		ptr = self->block + self->block_size;
-		size = self->params.post_extra_size;
-	}
-	
-	if (segment_size) {
-		*segment_size = size;
-	}
-	
-	return ptr;
 }
 
 void LeafFinish(Leaf *self) {
@@ -1325,7 +1158,14 @@ void LeafFree(Leaf *self) {
 	free(self->phdrs);
 	
 	// Unmap segments and info structures
-	munmap(self->block - self->params.pre_extra_size, self->block_size + self->params.pre_extra_size + self->params.post_extra_size);
+#ifdef LEAF_LOAD_SPARSE
+	for (size_t i = 0; i < self->segment_count; i++) {
+		LeafLoadedSegment *s = &self->segments[i];
+		munmap(s->addr, s->size);
+	}
+#else
+	munmap(self->block, self->block_size);
+#endif
 	
 	free(self->segments);
 	

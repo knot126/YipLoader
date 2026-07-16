@@ -48,8 +48,6 @@ void *gLibAndroid;
 void *gLibC;
 char *gGameName;
 char *gPackageCodePath;
-YipLoader_LinearAllocator gPreSegmentAllocator;
-YipLoader_LinearAllocator gPostSegmentAllocator;
 
 /* Early init, init, and release */
 const char *YipLoader_EarlyInit(void) {
@@ -149,29 +147,13 @@ static inline char *YipLoader_NameOfGameFromObjectPath(const char *path) {
 	return strndup(lib, end - lib);
 }
 
-// Because the main use of the pre and post segments is for trampolines, which
-// are generally shorter on 32-bit arches, we specify less pre and post space
-// for them than 64-bit arches.
-#if defined(__arm__) || defined(__i386__)
-#define YIP_PRE_SPACE (32 * 1024) // 32 KiB
-#define YIP_POST_SPACE (16 * 1024) // 16 KiB
-#else
-#define YIP_PRE_SPACE (64 * 1024) // 64 KiB
-#define YIP_POST_SPACE (16 * 1024) // 16 KiB
-#endif
-
 const char *YipLoader_LoadGame(void) {
 	/**
 	 * Find and load the main game binary
 	 */
 	
 	// Create an instance of Leaf for loading the main binary
-	LeafParams params = {
-		.pre_extra_size = YIP_PRE_SPACE,
-		.post_extra_size = YIP_POST_SPACE,
-	};
-	
-	gLeaf = LeafInit(&params);
+	gLeaf = LeafInit();
 	
 	if (!gLeaf) {
 		return "Leaf init failed";
@@ -215,19 +197,6 @@ const char *YipLoader_LoadGame(void) {
 	// Close asset handle, its not needed anymore
 	AAsset_close(asset);
 	free(so_path);
-	
-	return NULL;
-}
-
-const char *YipLoader_PostLoadGame(void) {
-	// Setup linear allocators for pre and post segments
-	size_t pre_size;
-	void *pre = LeafGetSegment(gLeaf, LEAF_EXTRA_PRE, &pre_size);
-	YipLoader_LinearAllocator_Init(&gPreSegmentAllocator, pre, pre_size, true);
-	
-	size_t post_size;
-	void *post = LeafGetSegment(gLeaf, LEAF_EXTRA_POST, &post_size);
-	YipLoader_LinearAllocator_Init(&gPostSegmentAllocator, post, post_size, false);
 	
 	return NULL;
 }

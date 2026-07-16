@@ -27,7 +27,6 @@
 #pragma once
 
 #include "extern/leaf.h"
-#include "linalloc.h"
 #include "yiploader.h"
 
 /* Globals */
@@ -38,8 +37,6 @@ extern void *gLibC;
 extern char *gGameName;
 extern char *gPackageCodePath;
 extern YipModInfo *gModChain;
-extern YipLoader_LinearAllocator gPreSegmentAllocator;
-extern YipLoader_LinearAllocator gPostSegmentAllocator;
 
 /* Create/destroy YipLoader functions */
 const char *YipLoader_EarlyInit(void);
@@ -48,5 +45,4 @@ void YipLoader_Release(void);
 
 /* Load game */
 const char *YipLoader_LoadGame(void);
-const char *YipLoader_PostLoadGame(void);
 const char *YipLoader_LoadMods(void);

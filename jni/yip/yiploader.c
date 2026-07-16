@@ -44,11 +44,6 @@
 #include "extern/leafhook.h"
 /// end of that
 
-/// @section leaf_detour_setup
-#define LEAF_DETOURS_IMPLEMENTATION
-#include "extern/leaf_detour.h"
-/// end of that
-
 void *YipLookupSymbol(const char *symbol) {
 	/**
 	 * Get the address of a symbol in the main game binary.
@@ -128,93 +123,6 @@ void *YipHookFunctionAt(size_t vaddr, void *hook, bool replace) {
 	return NULL;
 }
 
-typedef struct YipDetour {
-	LeafDetour d;
-} YipDetour;
-
-static YipDetour *YipDetourFunction_RawAddress(void *function, size_t function_size, void *detour) {
-	/**
-	 * Detour a function by raw address, **this is internal**!
-	 */
-	
-	YipDetour *self = malloc(sizeof *self); // todo yes this leaks. who cares!
-	
-	if (!self) {
-		return NULL;
-	}
-	
-	LeafDetourAlloc alloc_context = {
-		.context = &gPreSegmentAllocator,
-		.func = (void *) YipLoader_LinearAllocator_Alloc,
-	};
-	
-	if (LeafDetourCreateEx(&self->d, function, function_size, detour, 0, &alloc_context)) {
-		free(self);
-		return NULL;
-	}
-	
-	return self;
-}
-
-YipDetour *YipDetourFunction(const char *symbol, void *detour) {
-	/**
-	 * Create an undoable detour for the function with the symbol name `symbol`,
-	 * and then apply it.
-	 */
-	
-	LeafSym *info = LeafSymbolInfo(gLeaf, symbol);
-	
-	if (!info) {
-		return NULL;
-	}
-	
-	return YipDetourFunction_RawAddress((void *) info->st_value, info->st_size, detour);
-}
-
-YipDetour *YipDetourFunctionAt(size_t vaddr, size_t func_size, void *detour) {
-	/**
-	 * Create an undoable detour for the function at the given virtual address,
-	 * and then apply it. You must specify the size of the function manually,
-	 * so the detour library knows what type of detour is best to create.
-	 */
-	
-	void *func = LeafGetRealAddr(gLeaf, vaddr);
-	
-	if (!func) {
-		return NULL;
-	}
-	
-	return YipDetourFunction_RawAddress(func, func_size, detour);
-}
-
-void YipDetourSwap(YipDetour *self) {
-	/**
-	 * Toggle between the detoured and undetoured states.
-	 */
-	
-	LeafDetourSwap(&self->d);
-}
-
-bool YipReplaceFunction(const char *symbol, void *replacement) {
-	/**
-	 * Premanently replace the function with the given symbol name.
-	 */
-	
-	YipDetour *d = YipDetourFunction(symbol, replacement);
-	free(d);
-	return d != NULL;
-}
-
-bool YipReplaceFunctionAt(size_t vaddr, size_t func_size, void *replacement) {
-	/**
-	 * Premanently replace the function at the given virtual address.
-	 */
-	
-	YipDetour *d = YipDetourFunctionAt(vaddr, func_size, replacement);
-	free(d);
-	return d != NULL;
-}
-
 bool YipPatch(size_t vaddr, YipBuffer buffer) {
 	/**
 	 * Patch the bytes starting at the virtual address vaddr by replacing them
@@ -278,10 +186,10 @@ Leaf *YipGetLeafInstance(void) {
 	return gLeaf;
 }
 
-const YipModInfo *YipGetModList(void) {
+const YipModInfoStatic *YipGetModList(void) {
 	/**
 	 * Get the first node in a linked-list of loaded mods
 	 */
 	
-	return gModChain;
+	return (YipModInfoStatic *) gModChain;
 }
