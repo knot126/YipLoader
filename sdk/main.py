@@ -104,17 +104,24 @@ include $(BUILD_SHARED_LIBRARY)""")
 	shutil.copytree(f"{SDK_DIR}/jni/yip", f"jni/yip/yiploader", dirs_exist_ok=True)
 	shutil.copytree(f"{SDK_DIR}/libs/", f"jni/yip", dirs_exist_ok=True)
 
+def upgrade():
+	print("Copy pre-built libraries and headers...")
+	shutil.copytree(f"{SDK_DIR}/jni/yip", f"jni/yip/yiploader", dirs_exist_ok=True)
+	shutil.copytree(f"{SDK_DIR}/libs/", f"jni/yip", dirs_exist_ok=True)
+
 def build():
 	os.system('ndk-build')
 
 def main():
 	if len(sys.argv) < 2:
-		print("Second argument should be one of: 'create', 'build', 'update'")
+		print("Second argument should be one of: 'create', 'build', 'upgrade'")
 		return
 	
 	match sys.argv[1]:
 		case 'create':
 			create()
+		case 'upgrade':
+			upgrade()
 		case 'build':
 			build()
 		case _:

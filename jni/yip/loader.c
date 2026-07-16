@@ -153,7 +153,7 @@ const char *YipLoader_LoadGame(void) {
 	 */
 	
 	// Create an instance of Leaf for loading the main binary
-	gLeaf = LeafInit();
+	gLeaf = LeafInit(NULL);
 	
 	if (!gLeaf) {
 		return "Leaf init failed";
