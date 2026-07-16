@@ -1,9 +1,9 @@
 /**
- * Handle loading the target game (using Leaf), built-in modules and extensions.
+ * Linear allocator for pre and post ELF extra segment
  * 
  * -----------------------------------------------------------------------------
  * 
- * This file is part of KnShim. Copyright (c) 2025 - 2026 Knot126.
+ * This file is part of KnShim. Copyright (c) 2024 - 2025 Knot126.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,29 +24,52 @@
  * SOFTWARE.
  */
 
-#pragma once
-
-#include "extern/leaf.h"
 #include "linalloc.h"
-#include "yiploader.h"
+#include "log.h"
 
-/* Globals */
-extern struct android_app *gApp;
-extern Leaf *gLeaf;
-extern void *gLibAndroid;
-extern void *gLibC;
-extern char *gGameName;
-extern char *gPackageCodePath;
-extern YipModInfo *gModChain;
-extern YipLoader_LinearAllocator gPreSegmentAllocator;
-extern YipLoader_LinearAllocator gPostSegmentAllocator;
+#define LA_ALIGNMENT 8
 
-/* Create/destroy YipLoader functions */
-const char *YipLoader_EarlyInit(void);
-const char *YipLoader_Init(void);
-void YipLoader_Release(void);
+void YipLoader_LinearAllocator_Init(YipLoader_LinearAllocator *self, void *block, size_t size, bool backwards) {
+	self->size = size;
+	self->backwards = backwards;
+	
+	if (backwards) {
+		self->block = block + size;
+	}
+	else {
+		self->block = block;
+	}
+}
 
-/* Load game */
-const char *YipLoader_LoadGame(void);
-const char *YipLoader_PostLoadGame(void);
-const char *YipLoader_LoadMods(void);
+void *YipLoader_LinearAllocator_Alloc(YipLoader_LinearAllocator *self, void *block, size_t size) {
+	if (block || !size) {
+		return NULL;
+	}
+	
+	// Make it aligned if its not already
+	if (size % LA_ALIGNMENT) {
+		size += size - (size % LA_ALIGNMENT);
+	}
+	
+	// Make sure we have enough of the block left to satisfy the allocation
+	if (self->size < size) {
+		return NULL;
+	}
+	
+	// Return block
+	if (self->backwards) {
+		self->size -= size;
+		self->block -= size;
+		LogI("LA Alloc bwd size=%zu ptr=%p", size, self->block);
+		return self->block;
+	}
+	else {
+		void * const ret = self->block;
+		self->size -= size;
+		self->block += size;
+		LogI("LA Alloc fwd size=%zu ptr=%p", size, ret);
+		return ret;
+	}
+	
+	return NULL;
+}

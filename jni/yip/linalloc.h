@@ -1,9 +1,9 @@
 /**
- * Handle loading the target game (using Leaf), built-in modules and extensions.
+ * Linear allocator for pre and post ELF extra segment
  * 
  * -----------------------------------------------------------------------------
  * 
- * This file is part of KnShim. Copyright (c) 2025 - 2026 Knot126.
+ * This file is part of KnShim. Copyright (c) 2024 - 2025 Knot126.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,29 +24,20 @@
  * SOFTWARE.
  */
 
-#pragma once
+#ifndef _YIP_LINALLOC_H_
+#define _YIP_LINALLOC_H_
 
-#include "extern/leaf.h"
-#include "linalloc.h"
-#include "yiploader.h"
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
-/* Globals */
-extern struct android_app *gApp;
-extern Leaf *gLeaf;
-extern void *gLibAndroid;
-extern void *gLibC;
-extern char *gGameName;
-extern char *gPackageCodePath;
-extern YipModInfo *gModChain;
-extern YipLoader_LinearAllocator gPreSegmentAllocator;
-extern YipLoader_LinearAllocator gPostSegmentAllocator;
+typedef struct YipLoader_LinearAllocator {
+	void *block;
+	size_t size;
+	bool backwards;
+} YipLoader_LinearAllocator;
 
-/* Create/destroy YipLoader functions */
-const char *YipLoader_EarlyInit(void);
-const char *YipLoader_Init(void);
-void YipLoader_Release(void);
+void  YipLoader_LinearAllocator_Init(YipLoader_LinearAllocator *self, void *block, size_t size, bool backwards);
+void *YipLoader_LinearAllocator_Alloc(YipLoader_LinearAllocator *self, void *block, size_t size);
 
-/* Load game */
-const char *YipLoader_LoadGame(void);
-const char *YipLoader_PostLoadGame(void);
-const char *YipLoader_LoadMods(void);
+#endif
