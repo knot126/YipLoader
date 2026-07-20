@@ -44,6 +44,11 @@
 #include "extern/leafhook.h"
 /// end of that
 
+/// @section leaf_detours_setup
+#define LEAF_DETOURS_IMPLEMENTATION
+#include "extern/leaf_detours.h"
+/// end of that
+
 void *YipLookupSymbol(const char *symbol) {
 	/**
 	 * Get the address of a symbol in the main game binary.
@@ -67,6 +72,48 @@ static bool YipLoader_HookInit(void) {
 		}\
 	}
 
+static void *YipHookFunction_LeafHookImpl(void *function, size_t function_size, void *hook) {
+	/**
+	 * Hook a function using Leaf Hook. This assumes the function is not being
+	 * replaced entirely since we use Detours for that now.
+	 */
+	
+	// We can't hook small functions for now.
+	if (function_size < LH_HOOK_SIZE) {
+		return NULL;
+	}
+	
+	ENSURE_HOOKING_CONTEXT();
+	
+	void *orig = function;
+	
+	if (LHHookerHookFunction(gHookingContext, function, hook, &orig)) {
+		return orig;
+	}
+	
+	return NULL;
+}
+
+static void *YipReplaceFunction_DetoursImpl(void *function, size_t function_size, void *hook) {
+	/**
+	 * Replace a function with another using Leaf Detours.
+	 */
+	
+	LeafDetourAlloc alloc_info = {
+		.context = &gPreSegmentAllocator,
+		.func = (void *) YipLoader_LinearAllocator_Alloc,
+	};
+	
+	LeafDetour discarded;
+	
+	if (LeafDetourCreateEx(&discarded, function, function_size, hook, 0, &alloc_info)) {
+		return NULL;
+	}
+	else {
+		return function;
+	}
+}
+
 void *YipHookFunction(const char *symbol, void *hook, bool replace) {
 	/**
 	 * Hook a function given the symbol name, the hook to use, and weather or
@@ -78,23 +125,18 @@ void *YipHookFunction(const char *symbol, void *hook, bool replace) {
 	 * on success. If the function fails, it always returns NULL.
 	 */
 	
-	ENSURE_HOOKING_CONTEXT();
-	
 	LeafSym *sym_info = LeafSymbolInfo(gLeaf, symbol);
 	
-	// We can't hook small functions for now.
-	if (sym_info->st_size < LH_HOOK_SIZE) {
+	if (!sym_info) {
 		return NULL;
 	}
 	
-	void *func = (void *) sym_info->st_value;
-	void *orig = func;
-	
-	if (LHHookerHookFunction(gHookingContext, func, hook, replace ? NULL : &orig)) {
-		return orig;
+	if (replace) {
+		return YipReplaceFunction_DetoursImpl((void *) sym_info->st_value, sym_info->st_size, hook);
 	}
-	
-	return NULL;
+	else {
+		return YipHookFunction_LeafHookImpl((void *) sym_info->st_value, sym_info->st_size, hook);
+	}
 }
 
 void *YipHookFunctionAt(size_t vaddr, void *hook, bool replace) {
@@ -111,16 +153,14 @@ void *YipHookFunctionAt(size_t vaddr, void *hook, bool replace) {
 	 * on success. If the function fails, it always returns NULL.
 	 */
 	
-	ENSURE_HOOKING_CONTEXT();
+	void *function = LeafGetRealAddr(gLeaf, vaddr);
 	
-	void *func = LeafGetRealAddr(gLeaf, vaddr);
-	void *orig = func;
-	
-	if (LHHookerHookFunction(gHookingContext, func, hook, replace ? NULL : &orig)) {
-		return orig;
+	if (replace) {
+		return YipReplaceFunction_DetoursImpl(function, 0xffffff, hook);
 	}
-	
-	return NULL;
+	else {
+		return YipHookFunction_LeafHookImpl(function, 0xffffff, hook);
+	}
 }
 
 bool YipPatch(size_t vaddr, YipBuffer buffer) {
@@ -160,6 +200,25 @@ bool YipPatchv2(size_t vaddr, YipBuffer buffer, YipBuffer *original) {
 	memcpy(addr, buffer.data, buffer.size);
 	
 	return true;
+}
+
+void *YipAllocate(YipMemoryRegion region, size_t size) {
+	/**
+	 * Allocate memory from a special area. Currently, this supports allocating
+	 * from Leaf's extra segments.
+	 */
+	
+	switch (region) {
+		case YIP_MEMORY_REGION_PRE_SEGMENT: {
+			return YipLoader_LinearAllocator_Alloc(&gPreSegmentAllocator, NULL, size);
+		}
+		case YIP_MEMORY_REGION_POST_SEGMENT: {
+			return YipLoader_LinearAllocator_Alloc(&gPostSegmentAllocator, NULL, size);
+		}
+		default: {
+			return NULL;
+		}
+	}
 }
 
 const char *YipGetGameName(void) {

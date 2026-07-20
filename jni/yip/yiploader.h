@@ -54,7 +54,15 @@ typedef struct YipModInfoStatic {
 } YipModInfoStatic;
 
 /**
- * Init, tick and destroy function types
+ * Enum of special regions of memory that are managed by YipLoader
+ */
+typedef enum YipMemoryRegion {
+	YIP_MEMORY_REGION_PRE_SEGMENT = 1,
+	YIP_MEMORY_REGION_POST_SEGMENT = 2,
+} YipMemoryRegion;
+
+/**
+ * Init, tick and destroy mod function types
  */
 typedef void (*YipModConstructor)(void);
 
@@ -64,6 +72,7 @@ void *YipHookFunction(const char *symbol, void *hook, bool replace);
 void *YipHookFunctionAt(size_t vaddr, void *hook, bool replace);
 bool YipPatch(size_t vaddr, YipBuffer buffer);
 bool YipPatchv2(size_t vaddr, YipBuffer buffer, YipBuffer *original);
+void *YipAllocate(YipMemoryRegion region, size_t size);
 
 struct android_app;
 

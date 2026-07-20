@@ -10,7 +10,8 @@ LOCAL_SRC_FILES := \
 	yip/loader.c \
 	yip/jnistuff.c \
 	yip/apkiter.c \
-	yip/yiploader.c
+	yip/yiploader.c \
+	yip/linear_allocator.c
 LOCAL_LDLIBS     := -ldl -llog -landroid
 LOCAL_STATIC_LIBRARIES := android_native_app_glue
 LOCAL_C_INCLUDES := yip/extern

@@ -1,5 +1,5 @@
 /**
- * Shit file
+ * Linear allocator for pre and post ELF extra segment
  * 
  * -----------------------------------------------------------------------------
  * 
@@ -24,66 +24,20 @@
  * SOFTWARE.
  */
 
-#include <android_native_app_glue.h>
-#include <android/log.h>
-#include <string.h>
+#ifndef _YIP_LINALLOC_H_
+#define _YIP_LINALLOC_H_
+
+#include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
-#include "util.h"
-#include "arch.h"
-#include "loader.h"
+typedef struct YipLoader_LinearAllocator {
+	void *block;
+	size_t size;
+	bool backwards;
+} YipLoader_LinearAllocator;
 
-typedef void (*AndroidMainFunc)(struct android_app *app);
+void  YipLoader_LinearAllocator_Init(YipLoader_LinearAllocator *self, void *block, size_t size, bool backwards);
+void *YipLoader_LinearAllocator_Alloc(YipLoader_LinearAllocator *self, void *block, size_t size);
 
-#include "version.h"
-
-void android_main(struct android_app *app) {
-	const char *status;
-	
-	// Set gApp to android app structure
-	gApp = app;
-	
-	// Early shim init
-	status = YipLoader_EarlyInit();
-	
-	if (status) {
-		LogF("Early init failed: %s", status);
-		abort();
-	}
-	
-	LogI("YipLoader release %s (for %s); App SDK %d, Device SDK %d", SHIM_VERSION, KN_ARCH_STRING, YipLoader_GetAppSDK(), YipLoader_GetDeviceSDK());
-	
-	// Load game
-	status = YipLoader_LoadGame();
-	
-	if (status) {
-		LogF("Loading game failed: %s", status);
-		abort();
-	}
-	
-	// Post load game
-	status = YipLoader_PostLoadGame();
-	
-	if (status) {
-		LogF("Post load game setup failed: %s", status);
-		abort();
-	}
-	
-	// Load mods + later shim init
-	status = YipLoader_LoadMods();
-	
-	if (status) {
-		LogF("Failed to load mods: %s", status);
-		abort();
-	}
-	
-	// Get main func and call
-	AndroidMainFunc func = LeafSymbolAddr(gLeaf, "android_main");
-	
-	if (!func) {
-		LogF("Could not find android_main()!!!");
-		abort();
-	}
-	
-	func(app);
-}
+#endif
