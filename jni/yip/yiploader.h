@@ -16,6 +16,8 @@ typedef struct YipBuffer {
 	uint8_t *data;
 } YipBuffer;
 
+#define YipDestroyBuffer(BUFFER) (free((BUFFER).data))
+
 /**
  * Information about a specific mod
  */
@@ -70,13 +72,13 @@ typedef void (*YipModConstructor)(void);
 void *YipLookupSymbol(const char *symbol);
 void *YipHookFunction(const char *symbol, void *hook, bool replace);
 void *YipHookFunctionAt(size_t vaddr, void *hook, bool replace);
+
 bool YipPatch(size_t vaddr, YipBuffer buffer);
 bool YipPatchv2(size_t vaddr, YipBuffer buffer, YipBuffer *original);
+
 void *YipAllocate(YipMemoryRegion region, size_t size);
 
 struct android_app;
-
-#define YipDestroyBuffer(BUFFER) (free((BUFFER).data))
 
 const char *YipGetGameName(void);
 struct android_app *YipGetAndroidAppStruct(void);

@@ -14,11 +14,10 @@ Android games that provides a minimal but functional API.
    currently undergoing changes to become a generic, useful mod loader. While it
    should work, it is missing certian functionality like dependency validation.
 
-.. warning:: Overuse of YipLoader may result in death and destruction.
-
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+   :hidden:
 
 Getting Started
 ===============
@@ -119,11 +118,24 @@ Data Types
    
    This is the interface of the ``mod_init()`` function.
 
+.. c:enum:: YipMemoryRegion
+   
+   Name given to a region of memory with special properties
+   
+   .. c:enumerator:: YIP_MEMORY_REGION_PRE_SEGMENT
+      
+      Region of memory just before the ELF data, usually coming before the
+      program text (code) segment.
+   
+   .. c:enumerator:: YIP_MEMORY_REGION_POST_SEGMENT
+      
+      Region of memory just after the ELF data, usually after the data segment.
 
 Functions
 =========
 
-function info
+Modification
+------------
 
 .. c:function:: void *YipLookupSymbol(const char *symbol)
    
@@ -169,10 +181,32 @@ function info
    
    Patch a specific chunk of memory, given the buffer to replace it with and the virtual address of that chunk, and optionally copy the original data of that chunk of memory into a buffer. The chunk of memory must be within the game binary and is given relative to the ELF virtual base address.
    
+   :param vaddr: Virtual address where the patch starts
+   :param buffer: Buffer containing data to write there
+   :param original: Optional buffer to return the original bytes in
+   :returns: Boolean indicating success
+   
    .. tip:: If what you are doing is possible using hooks, please use them instead as they tend to be more version-agnostic and don't break as much between upgrades. 
    
    .. important:: If ``original`` points to a buffer, it should be freed using :c:macro:`YipDestroyBuffer`.
+
+Memory Allocation
+-----------------
+
+.. c:function:: void *YipAllocate(YipMemoryRegion region, size_t size)
    
+   Allocate memory of *at least* the given size in one of the special regions, returning a pointer to the start of the newly allocated block.
+   
+   :param region: Region of memory to allocate inside of
+   :param size: Minimum size for the allocated block; it may be more
+   :returns: Pointer to the newly allocated block of memory
+   :retval NULL: When allocation fails (probably due to running out of space)
+   
+   .. note:: Currently, there is no way to deallocate this memory, since we use a linear allocator.
+
+Utilities
+---------
+
 .. c:function:: const char *YipGetGameName(void)
 
    Get the name of the currently loaded app. This is the same as the name of the game's main library, e.g. libsmashhit.so results in a game name of smashhit.
@@ -189,10 +223,3 @@ function info
 
    Get the mod at the head of the internal loaded mod list. 
    
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
-
-
-
-

@@ -60,14 +60,14 @@ void *YipLoader_LinearAllocator_Alloc(YipLoader_LinearAllocator *self, void *blo
 	if (self->backwards) {
 		self->size -= size;
 		self->block -= size;
-		// LogI("LA Alloc bwd size=%zu ptr=%p", size, self->block);
+		LogI("LA Alloc bwd size=%zu ptr=%p", size, self->block);
 		return self->block;
 	}
 	else {
 		void * const ret = self->block;
 		self->size -= size;
 		self->block += size;
-		// LogI("LA Alloc fwd size=%zu ptr=%p", size, ret);
+		LogI("LA Alloc fwd size=%zu ptr=%p", size, ret);
 		return ret;
 	}
 	
