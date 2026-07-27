@@ -110,11 +110,14 @@ static inline char *YipLoader_FindGameObject(void) {
 	 * string must be freed!
 	 */
 	
+	char *filename = NULL;
+	
 	const char *const subdir = "native/" KN_ARCH_STRING;
 	AAssetDir *natives = AAssetManager_openDir(gApp->activity->assetManager, subdir);
 	if (!natives) { return NULL; }
 	const char *filename_am = AAssetDir_getNextFileName(natives);
-	char *filename = malloc(strlen(subdir) + strlen(filename_am) + 2);
+	if (!filename_am) { goto finally; }
+	filename = malloc(strlen(subdir) + strlen(filename_am) + 2);
 	if (!filename) { goto finally; }
 	strcpy(filename, subdir);
 	strcat(filename, "/");
